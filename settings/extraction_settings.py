@@ -1,0 +1,10 @@
+DOC_LANGUAGE_LIST = ['en']
+DOC_LANGUAGE = 'en'
+PARSE_TABLE = False
+PARSE_FORMULA = False
+DRAW_TEXT_IDENTIFICATION_BOX = True
+DRAW_LAYOUT_IDENTIFICATION_BOX = True
+DUMP_ORIGINAL_FILE = False
+SUPPORT_ONLY_PDF_FILES = True
+pdf_suffixes = ["pdf"]
+image_suffixes = ["png", "jpeg", "jp2", "webp", "gif", "bmp", "jpg"]
