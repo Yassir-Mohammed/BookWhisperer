@@ -6,6 +6,7 @@ from collections import Counter
 import spacy
 from pathlib import Path
 
+from settings.transformation_settings import *
 
 class JSONL_Master:
     
@@ -104,12 +105,20 @@ class MarkdownBookProcessor:
     def _clean_header_text(self, s: str) -> str:
         return re.sub(r'[\s:]+$', '', s).strip()
 
+
+    
     def _clean_text_for_embedding(self, text: str) -> str:
-        # Replace tabs with space, normalize newlines, remove excessive markdown symbols, collapse spaces
+
+        # Remove image references like (images/XXXX.jpg) where XXXX can be anything
+        text = re.sub(r"\(images/[^)]+\.(?:jpg|jpeg|png|gif|bmp|tiff|svg)\)", "", text, flags=re.IGNORECASE)
+        # Replace tabs with space and normalize newlines
         text = text.replace("\t", " ").replace("\n", " ")
+        # Remove excessive markdown symbols
         text = re.sub(r"[*_`~#>]+", "", text)
+        # Collapse multiple spaces
         text = re.sub(r"\s+", " ", text).strip()
         return text
+
 
     def _make_safe_filename(self, s: str) -> str:
         """
@@ -121,7 +130,7 @@ class MarkdownBookProcessor:
         s = s.replace(' ', ' ')               # keep spaces for readability
         return s[:60]  # limit length
 
-    def _build_chapters_from_splits(self, splits: List[Dict]) -> List[Dict]:
+    def _build_chapters_from_splits(self, splits: List[Dict], book_title:str) -> List[Dict]:
         splits = sorted(splits, key=lambda h: h["start"])
         chapters = []
 
@@ -130,12 +139,13 @@ class MarkdownBookProcessor:
             pre_text = self._clean_text_for_embedding(self.text[:splits[0]["start"]].strip())
             if len(pre_text.split()) >= 20:
                 chapters.append({
+                    "book_title": book_title,
                     "title": "Preamble",
                     "level": None,
                     "start": 0,
                     "end": splits[0]["start"],
-                    "body": pre_text,
-                    "word_count": len(pre_text.split())
+                    "word_count": len(pre_text.split()),
+                    "body": pre_text 
                 })
 
         for i, sp in enumerate(splits):
@@ -143,12 +153,13 @@ class MarkdownBookProcessor:
             end = splits[i + 1]["start"] if i + 1 < len(splits) else len(self.text)
             body = self._clean_text_for_embedding(self.text[start:end].strip())
             chapters.append({
+                "book_title": book_title,
                 "title": sp.get("text") or f"Chapter {i+1}",
                 "level": sp.get("level"),
                 "start": start,
                 "end": end,
-                "body": body,
-                "word_count": len(body.split())
+                "word_count": len(body.split()),
+                "body": body    
             })
         return chapters
 
@@ -156,7 +167,7 @@ class MarkdownBookProcessor:
     # Public methods
     # -------------------------
     def split_into_chapters(self):
-        book_title = os.path.splitext(os.path.basename(self.md_path))[0]
+        book_title = str(os.path.splitext(os.path.basename(self.md_path))[0])
 
         # Find markdown headers
         header_re = re.compile(r'^(?P<hash>#{1,6})\s*(?P<text>.+?)\s*$', re.MULTILINE)
@@ -166,18 +177,16 @@ class MarkdownBookProcessor:
         # 1) Headers with "chapter"
         chapter_headers = [h for h in headers if re.search(r'\bchapter\b', h["text"], re.IGNORECASE)]
         if len(chapter_headers) >= 2:
-            self.chapters = self._build_chapters_from_splits(chapter_headers)
+            self.chapters = self._build_chapters_from_splits(chapter_headers, book_title)
             # add book title
-            for ch in self.chapters:
-                ch["book_title"] = book_title
+            #for ch in self.chapters:ch["book_title"] = book_title
             return self.chapters
 
         # 2) High-level headers fallback
         high_level_headers = [h for h in headers if h["level"] in (1, 2)]
         if len(high_level_headers) >= 2:
-            self.chapters = self._build_chapters_from_splits(high_level_headers)
-            for ch in self.chapters:
-                ch["book_title"] = book_title
+            self.chapters = self._build_chapters_from_splits(high_level_headers, book_title)
+            #for ch in self.chapters:ch["book_title"] = book_title
             return self.chapters
 
         # 3) Plain-text "CHAPTER" lines fallback
@@ -185,14 +194,13 @@ class MarkdownBookProcessor:
         chap_lines = [{"start": m.start(), "end": m.end(), "level": None,
                        "text": self._clean_header_text(m.group("header"))} for m in chap_line_re.finditer(self.text)]
         if len(chap_lines) >= 2:
-            self.chapters = self._build_chapters_from_splits(chap_lines)
-            for ch in self.chapters:
-                ch["book_title"] = book_title
+            self.chapters = self._build_chapters_from_splits(chap_lines, book_title)
+            #for ch in self.chapters:ch["book_title"] = book_title
             return self.chapters
 
         # 4) Last fallback: split into fixed-size chunks
         words = self.text.split()
-        chunk_size = 1000
+        chunk_size = CHUNK_SIZE
         chunks = []
         for i in range(0, len(words), chunk_size):
             chunk_words = words[i:i + chunk_size]
@@ -210,24 +218,15 @@ class MarkdownBookProcessor:
         return self.chapters
 
 
-    def extract_entities(
-        self,
-        entity_types: list = [
-            "PERSON", "FAC", "ORG", "GPE", "LOC", "PRODUCT",
-            "EVENT", "QUANTITY", "ORDINAL", "CARDINAL"
-        ],
-        top_n: int = None
-    ):
+    def extract_entities(self,entity_types: list = NER_DEFAULT_TYPES,top_n: int = NER_DEFAULT_TOP_N):
         """
-        Extract named entities from chapters with normalization, deduplication,
-        and cleanup of overlaps (e.g., removing PERSON names from other lists).
-
-        Parameters:
-            entity_types (list): List of SpaCy entity labels to extract.
-            top_n (int, optional): Limit number of entities per type by frequency.
-
-        Returns:
-            list: Chapters with added "entities" key.
+        Extract named entities from chapters with:
+        - normalization and deduplication
+        - stopword/short token cleanup
+        - overlap resolution (PERSON dominates)
+        - possessive/suffix stripping ("Harry's" → "harry")
+        - lowercase normalization
+        - removal of entities with file extensions (e.g., .jpg, .png)
         """
         # Validate allowed entity labels
         permitted_entities = set(self.nlp.get_pipe("ner").labels)
@@ -235,37 +234,81 @@ class MarkdownBookProcessor:
         if not valid_entity_types:
             raise ValueError(f"No valid entity types provided. Permitted: {permitted_entities}")
 
+        stopwords = self.nlp.Defaults.stop_words
+        file_extensions = NER_DEFAULT_EXTENSION_TO_REMOVE
+
+        def _normalize_entity(ent: str) -> str:
+            """Normalize entity: lowercase, remove possessive/apostrophe-s and plural 's'."""
+            ent = ent.strip().lower()
+            ent = re.sub(r"'s\b", "", ent)   # remove possessive ('Harry's' → 'harry')
+            ent = re.sub(r"s\b", "", ent)    # remove trailing plural s ('Potters' → 'potter')
+            return ent.strip()
+
+        def _has_file_extension(ent: str) -> bool:
+            """Check if entity contains any known file extension."""
+            for ext in file_extensions:
+                if ent.endswith(ext) or f"{ext} " in ent or f" {ext}" in ent:
+                    return True
+            return False
+
+        def _is_valid_entity(ent: str) -> bool:
+            """Filter out stopwords, digits, punctuation-only, short, or file-like entities."""
+            if not ent or len(ent) < 2:
+                return False
+            if ent in stopwords:
+                return False
+            if ent.isdigit():
+                return False
+            if _has_file_extension(ent):
+                return False
+            if all(ch in ".,!?;:-_–—'\"()[]{}" for ch in ent):
+                return False
+            return True
+
         for ch in self.chapters:
             doc = self.nlp(ch["body"])
             results = {}
 
-            # Step 1: Extract entities by type
+            # Step 1: Extract and normalize entities
             for ent_type in valid_entity_types:
-                ents = [ent.text.strip() for ent in doc.ents if ent.label_ == ent_type]
+                ents = [
+                    _normalize_entity(ent.text)
+                    for ent in doc.ents
+                    if ent.label_ == ent_type and _is_valid_entity(ent.text.lower())
+                ]
                 freq = Counter(ents)
                 unique = []
                 for name, _ in freq.most_common():
-                    # Avoid partial duplicates (e.g., "Potter" when "Harry Potter" exists)
                     if not any(name in existing or existing in name for existing in unique):
                         unique.append(name)
                 if top_n:
                     unique = unique[:top_n]
                 results[ent_type] = unique
 
-            # Step 2: Remove overlaps — if something is a PERSON, remove it from all others
+            # Step 2: Remove overlaps and suffix variants based on PERSON
             if "PERSON" in results:
-                person_names = set(results["PERSON"])
+                person_names = {p.lower() for p in results["PERSON"]}
+                expanded_person_names = set(person_names)
+                for name in list(person_names):
+                    if name.endswith("s"):
+                        expanded_person_names.add(name[:-1])
+                    if name.endswith("'s"):
+                        expanded_person_names.add(name[:-2])
+
                 for ent_type in list(results.keys()):
                     if ent_type != "PERSON":
                         results[ent_type] = [
                             ent for ent in results[ent_type]
-                            if ent not in person_names
+                            if ent not in expanded_person_names
                         ]
+
+            # Step 3: Ensure all entities are lowercase and unique
+            for ent_type in results:
+                results[ent_type] = sorted(set(e.lower() for e in results[ent_type]))
 
             ch["entities"] = results
 
         return self.chapters
-
 
 
 
