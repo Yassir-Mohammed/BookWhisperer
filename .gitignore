@@ -1,4 +1,9 @@
-# Byte-compiled / cached files
+# Python cache
 __pycache__/
-*.py[cod]
-*$py.class
+*.pyc
+
+# VSCode settings
+.vscode/
+
+# JSONL or temporary assets
+*.tmp
