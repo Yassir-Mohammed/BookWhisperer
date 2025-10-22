@@ -7,3 +7,7 @@ __pycache__/
 
 # JSONL or temporary assets
 *.tmp
+
+# Uploaded or temporary files
+temp/
+uploads/

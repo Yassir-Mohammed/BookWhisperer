@@ -1,23 +1,25 @@
 from functions.support_classes import JSONL_Master, MarkdownBookProcessor
-from functions.support_functions import list_documents,list_md_documents
-from settings.extraction_settings import SUPPORT_ONLY_PDF_FILES, image_suffixes, pdf_suffixes
+from functions.support_functions import list_documents,list_md_documents,initialize_temp_folder
+from settings.extraction_settings import SUPPORTED_SUFFIXES
 from pipeline.extraction import parse_doc
 from pathlib import Path
+import os
 
 
-def parse_documents_per_path(source_data_path, parsed_data_path ):
+MAIN_DIR, TEMP_DIR, PARSED_DATA_PATH, SPLIT_DATA_PATH = initialize_temp_folder()
 
-
-    asset_json_file_tracker = r"D:\Projects\ai_agent\DataScienceRAG\Asset\parsed_documents.jsonl"
-
-    supported_suffixes = pdf_suffixes if SUPPORT_ONLY_PDF_FILES else pdf_suffixes + image_suffixes
+def parse_documents_into_md():
     
-    documents_list = list_documents(folder_path = source_data_path, extensions = supported_suffixes)
-    print("Reading Documents...")
+    RAW_DATA_PATH = os.path.join(MAIN_DIR,"temp","1_raw_data")
 
+    print("Reading Documents...")
+    documents_list = list_documents(folder_path = RAW_DATA_PATH, extensions = SUPPORTED_SUFFIXES)
+    
+    asset_json_file_tracker = os.path.join(MAIN_DIR,"Asset","2_parsed_documents.jsonl")
     json_handler = JSONL_Master()
     parsed_dcouments = json_handler.load(file_path = asset_json_file_tracker)
     parsed_dcouments_list = [Path(doc['path']) for doc in parsed_dcouments] if parsed_dcouments != [] else []
+
 
     for document in documents_list:
         doc_name = document['name']
@@ -31,7 +33,7 @@ def parse_documents_per_path(source_data_path, parsed_data_path ):
 
         try:
             
-            parse_doc([doc_path], parsed_data_path, backend="pipeline")
+            parse_doc([doc_path], PARSED_DATA_PATH, backend="pipeline")
             json_handler.save(file_path = asset_json_file_tracker, new_data = [document])
 
         except Exception as e:
@@ -43,12 +45,15 @@ def parse_documents_per_path(source_data_path, parsed_data_path ):
 
     print("Parsing documents is finished.")
 
-def split_parsed_documents_into_chunks(source_data_path,split_data_path):
 
-    asset_json_file_tracker = r"D:\Projects\ai_agent\DataScienceRAG\Asset\cleaned_documents.jsonl"
+def split_parsed_documents_into_chunks():
 
-    md_documents = list_md_documents(folder_path= source_data_path)
+    
+    asset_json_file_tracker = os.path.join(MAIN_DIR,"Asset","3_cleaned_documents.jsonl")
+       
     print("Finding md documents...")
+    md_documents = list_md_documents(folder_path = PARSED_DATA_PATH)
+    
 
     json_handler = JSONL_Master()
     split_documents = json_handler.load(file_path = asset_json_file_tracker)
@@ -69,7 +74,7 @@ def split_parsed_documents_into_chunks(source_data_path,split_data_path):
             processor = MarkdownBookProcessor(doc_path)
             processor.split_into_chapters()                     # Split chapters or fallback chunks
             processor.extract_entities()                        # Detect characters & locations
-            processor.save_chapters_as_json(str(split_data_path))            # Save cleaned chapters
+            processor.save_chapters_as_json(str(SPLIT_DATA_PATH))            # Save cleaned chapters
 
             json_handler.save(file_path = asset_json_file_tracker, new_data = [document])
 

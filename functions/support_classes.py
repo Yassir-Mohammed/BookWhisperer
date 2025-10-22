@@ -1,13 +1,14 @@
 import json
 import os
 import re
-from typing import List, Dict
+from typing import List, Dict, Any
 from collections import Counter
 import spacy
 from pathlib import Path
 
 from settings.transformation_settings import *
 
+import streamlit as st
 class JSONL_Master:
     
     def __init__(self):
@@ -51,16 +52,28 @@ class JSONL_Master:
             new_data (list of dict, optional): List of document dictionaries with 'name' and 'path'.
                                                 Defaults to self.data if None.
         """
-        if new_data is None:
-            new_data = self.data
 
+        
         if not isinstance(new_data, list):
-            raise TypeError("new_data must be a list of dictionaries with 'name' and 'path'.")
+            raise TypeError("new_data must be a list of dictionaries with 'name' and 'path' keys.")
+
+        # Check that each element in the list is a dictionary with required keys
+        for i, item in enumerate(new_data):
+            if not isinstance(item, dict):
+                raise TypeError(f"Item at index {i} is not a dictionary: {type(item).__name__}")
+            
+            required_keys = {"name", "path"}
+            missing_keys = required_keys - set(item.keys())
+            
+            if missing_keys:
+                raise ValueError(f"Item at index {i} is missing required keys: {', '.join(missing_keys)}")
+    
 
         # Load existing paths to avoid duplicates
         existing_paths = set(doc["path"] for doc in self.load(file_path))
 
         with open(file_path, "a", encoding="utf-8") as f:
+           
             for doc in new_data:
                 if doc["path"] not in existing_paths:
                     f.write(json.dumps(doc, default=str) + "\n")
@@ -316,9 +329,10 @@ class MarkdownBookProcessor:
     def save_chapters_as_json(self, output_dir: str):
         os.makedirs(output_dir, exist_ok=True)
         base_name = os.path.splitext(os.path.basename(self.md_path))[0]
-
+       
         for i, ch in enumerate(self.chapters, 1):
-            safe_title = self._make_safe_filename(ch["title"])
+            
+            safe_title = self._make_safe_filename(ch["book_title"])
             filename = f"{i:02d} - {base_name} - {safe_title}.json"
             filepath = os.path.join(output_dir, filename)
 
@@ -329,3 +343,68 @@ class MarkdownBookProcessor:
         print(f"Saved {len(self.chapters)} chapters as JSON to {output_dir}")
 
 
+class ChapterLoader:
+    """
+    Loads and manages JSON files from a given directory.
+    Each JSON is expected to contain a dictionary (e.g., chapter data).
+    """
+
+    def __init__(self, base_path: str, recursive: bool = False):
+        """
+        Initialize the loader with the base directory.
+        Args:
+            base_path (str): Path to the directory containing JSON files.
+            recursive (bool): Whether to search subdirectories as well.
+        """
+        self.base_path = os.path.abspath(base_path)
+        self.recursive = recursive
+        self.json_files: List[Dict[str, str]] = []
+        self._scan_directory()
+
+    def _scan_directory(self) -> None:
+        """
+        Scan the directory for JSON files and store them in a list.
+        Each entry: {"name": filename.json, "path": full_path}.
+        """
+        files_found = []
+        if self.recursive:
+            for root, _, files in os.walk(self.base_path):
+                for f in files:
+                    if f.lower().endswith(".json"):
+                        files_found.append({
+                            "name": f,
+                            "path": os.path.join(root, f)
+                        })
+        else:
+            for f in os.listdir(self.base_path):
+                if f.lower().endswith(".json"):
+                    files_found.append({
+                        "name": f,
+                        "path": os.path.join(self.base_path, f)
+                    })
+        self.json_files = files_found
+
+    def list_files(self) -> List[Dict[str, str]]:
+        """Return a list of detected JSON files: [{'name': ..., 'path': ...}, ...]."""
+        return self.json_files
+
+    def load_json(self, file_path: str) -> Dict[str, Any]:
+        """
+        Load and return the dictionary stored in the specified JSON file.
+        Args:
+            file_path (str): The full path to the JSON file.
+        Returns:
+            dict: The JSON content as a dictionary.
+        Raises:
+            FileNotFoundError: If the file doesn't exist.
+            ValueError: If the JSON content isn't a dictionary.
+        """
+        if not os.path.isfile(file_path):
+            raise FileNotFoundError(f"No file found at path '{file_path}'")
+
+        with open(file_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        if not isinstance(data, dict):
+            raise ValueError(f"Expected a dictionary in '{file_path}', got {type(data)} instead.")
+        return data

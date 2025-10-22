@@ -3,6 +3,24 @@ import os
 import re
 
 
+
+def initialize_temp_folder(safe_mode = False):
+
+    MAIN_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
+    TEMP_DIR = os.path.join(MAIN_DIR,"temp")
+
+    RAW_DATA_DIR = os.path.join(TEMP_DIR, "1_raw_data")
+    PARSED_DATA_PATH = os.path.join(TEMP_DIR,"2_parsed_data")
+    SPLIT_DATA_PATH = os.path.join(TEMP_DIR,"3_cleaned_data")
+
+    if safe_mode:
+        os.makedirs(TEMP_DIR, exist_ok=True)
+        os.makedirs(RAW_DATA_DIR, exist_ok=True)
+        os.makedirs(PARSED_DATA_PATH, exist_ok=True)
+        os.makedirs(SPLIT_DATA_PATH, exist_ok=True)
+
+    return MAIN_DIR, TEMP_DIR, PARSED_DATA_PATH, SPLIT_DATA_PATH
+
 def list_documents(folder_path, extensions=['pdf']):
     """
     Scan a folder and return a list of documents with specified extensions.
@@ -68,7 +86,6 @@ def list_md_documents(folder_path, extensions=['md']):
 
     doc_list = []
     
-
     for root, _, files in os.walk(folder_path):
         root_path = Path(root)
         # Only consider paths/folders with uppercase pattern
@@ -83,3 +100,71 @@ def list_md_documents(folder_path, extensions=['md']):
                     
 
     return doc_list
+
+
+
+def build_file_summary_tree(input_documents, invalid_files, already_committed, new_files_to_commit):
+    """
+    Build a hierarchical tree summary of uploaded files and their categories.
+    Returns a formatted string (Markdown-safe) that can be passed to st.info().
+    """
+
+    def _format_tree_section(title, items, prefix_main, branch_mid, branch_last):
+        lines = [f"{prefix_main} {title}"]
+        if not items:
+            lines.append(f"{branch_last} (none)")
+            return lines
+        for i, name in enumerate(items):
+            if len(items) == 1:
+                lines.append(f"{branch_last} {name}")
+            else:
+                child_prefix = branch_mid if i < len(items) - 1 else branch_last
+                lines.append(f"{child_prefix} {name}")
+        return lines
+
+    total_uploaded = len(input_documents)
+    invalid_count = len(invalid_files)
+    committed_count = len(already_committed)
+    ready_count = len(new_files_to_commit)
+
+    # Start the tree
+    tree_lines = [f"📦 Uploaded files: {total_uploaded}"]
+
+    # Invalid files
+    tree_lines += _format_tree_section(
+        f"❌ Invalid: {invalid_count}",
+        invalid_files,
+        prefix_main="├──",
+        branch_mid="│   ├──",
+        branch_last="│   └──"
+    )
+
+    # Already committed files
+    tree_lines += _format_tree_section(
+        f"⚠️ Already committed: {committed_count}",
+        already_committed,
+        prefix_main="├──",
+        branch_mid="│   ├──",
+        branch_last="│   └──"
+    )
+
+    # Ready to commit files (final branch)
+    lines_ready = _format_tree_section(
+        f"🆕 Ready to commit: {ready_count}",
+        list(new_files_to_commit.keys()),
+        prefix_main="└──",
+        branch_mid="    ├──",
+        branch_last="    └──"
+    )
+    tree_lines += lines_ready
+
+    tree_text = "\n".join(tree_lines)
+
+    # Return clean, formatted string
+    summary_text = (
+        
+        f"```\n{tree_text}\n```\n"
+        f"Allowed characters: letters, numbers, underscores (_), hyphens (-), or dots (.) only."
+    )
+
+    return summary_text
