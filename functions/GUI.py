@@ -6,9 +6,7 @@ from functions.support_classes import JSONL_Master
 from functions.support_functions import list_documents,build_file_summary_tree
 from settings.extraction_settings import SUPPORTED_SUFFIXES
 
-MAIN_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
-TEMP_DIR = os.path.join(MAIN_DIR, "temp")
-os.makedirs(TEMP_DIR, exist_ok=True)
+from utilities.paths import MAIN_DIR, TEMP_DIR
 
 
 
@@ -54,7 +52,10 @@ def upload_files_element(element_text="Upload PDF documents",allowed_types=["pdf
     commit_btn_disable = False if valid_files != {}  else True
 
 
-    with st.expander("🗂 Files Commit", expanded=True):
+    if "expander_open" not in st.session_state:
+        st.session_state.expander_open = True
+
+    with st.expander("🗂 Files Commit", expanded=st.session_state.expander_open):
         msg_container = st.container()
         btn_container = st.container()
 
@@ -111,6 +112,9 @@ def upload_files_element(element_text="Upload PDF documents",allowed_types=["pdf
 
             with msg_container:
                 st.success(f"✅ {len(saved_files)} new PDF file(s) committed successfully to `{RAW_DATA_DIR}`")
+
+            # Collapse the expander
+            st.session_state.expander_open = False
 
             return saved_files, invalid_files, True
 

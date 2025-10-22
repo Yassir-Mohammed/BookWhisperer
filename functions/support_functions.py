@@ -4,23 +4,6 @@ import re
 
 
 
-def initialize_temp_folder(safe_mode = False):
-
-    MAIN_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
-    TEMP_DIR = os.path.join(MAIN_DIR,"temp")
-
-    RAW_DATA_DIR = os.path.join(TEMP_DIR, "1_raw_data")
-    PARSED_DATA_PATH = os.path.join(TEMP_DIR,"2_parsed_data")
-    SPLIT_DATA_PATH = os.path.join(TEMP_DIR,"3_cleaned_data")
-
-    if safe_mode:
-        os.makedirs(TEMP_DIR, exist_ok=True)
-        os.makedirs(RAW_DATA_DIR, exist_ok=True)
-        os.makedirs(PARSED_DATA_PATH, exist_ok=True)
-        os.makedirs(SPLIT_DATA_PATH, exist_ok=True)
-
-    return MAIN_DIR, TEMP_DIR, PARSED_DATA_PATH, SPLIT_DATA_PATH
-
 def list_documents(folder_path, extensions=['pdf']):
     """
     Scan a folder and return a list of documents with specified extensions.

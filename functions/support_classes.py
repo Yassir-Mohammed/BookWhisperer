@@ -1,14 +1,30 @@
+# Initialization + default paths
+from utilities.paths import *
+
+# Settings 
+from settings.transformation_settings import *
+from settings.vector_db_settings import DEFAULT_DB_TYPES
+
+# General Imports
 import json
 import os
 import re
 from typing import List, Dict, Any
 from collections import Counter
-import spacy
 from pathlib import Path
+from abc import ABC, abstractmethod
+import warnings
 
-from settings.transformation_settings import *
+# NLP Import 
+import spacy
 
-import streamlit as st
+# ChromaDB imports
+import chromadb
+from chromadb.utils import embedding_functions
+
+
+
+
 class JSONL_Master:
     
     def __init__(self):
@@ -344,6 +360,7 @@ class MarkdownBookProcessor:
 
 
 class ChapterLoader:
+    
     """
     Loads and manages JSON files from a given directory.
     Each JSON is expected to contain a dictionary (e.g., chapter data).
@@ -408,3 +425,145 @@ class ChapterLoader:
         if not isinstance(data, dict):
             raise ValueError(f"Expected a dictionary in '{file_path}', got {type(data)} instead.")
         return data
+    
+
+
+    
+# Parent class
+class VectorDBConnector(ABC):
+
+    
+
+    def __init__(self,*, db_dir:str, collection_name: str, db_type: str = "chroma", overwrite: bool = False, **kwargs):
+        """
+        Base constructor for vector DB connectors.
+        Args:
+            collection_name (str): Name of the collection.
+            db_type (str): Type of vector DB ('chroma' or 'leann').
+            overwrite (bool): Whether to overwrite an existing collection.
+            kwargs: DB-specific parameters.
+        """
+        self.collection_name = collection_name
+        self.db_type = db_type.lower()
+        self.kwargs = kwargs
+        self.connection = None
+        self.collection = None
+        self.db_dir = db_dir
+
+        # Validate database type
+        if self.db_type not in DEFAULT_DB_TYPES:
+            raise ValueError(f"Invalid db_type '{self.db_type}'. Must be one of {DEFAULT_DB_TYPES}.")
+
+
+        # Connect automatically
+        self.connect()
+
+        # Always create collection
+        self.create_collection(overwrite=overwrite)
+
+    @abstractmethod
+    def connect(self):
+        """Connect to the vector database."""
+        pass
+
+    @abstractmethod
+    def create_collection(self, overwrite: bool = False):
+        """Create or get a collection."""
+        pass
+
+    @abstractmethod
+    def add_documents(self, ids, embeddings, metadatas):
+        """Add pre-computed embeddings to the collection."""
+        pass
+
+    @abstractmethod
+    def query(self, embeddings, n_results=5):
+        """Query the collection with an embedding vector."""
+        pass
+
+#Chroma connector
+class ChromaConnector(VectorDBConnector):
+    def connect(self):
+        # Use the folder for this DB type as path
+        self.connection = chromadb.PersistentClient(path=self.db_dir)
+        return self.connection
+
+    def create_collection(self, overwrite=False):
+        self.embedding_function = embedding_functions.DefaultEmbeddingFunction()
+
+        if overwrite:
+            try:
+                self.connection.delete_collection(name=self.collection_name)
+            except Exception:
+                pass
+
+        self.collection = self.connection.get_or_create_collection(
+            name=self.collection_name,
+            embedding_function=self.embedding_function
+        )
+        return self.collection
+
+    def add_documents(self, ids, embeddings, metadatas):
+        self.collection.add(ids=ids, embeddings=embeddings, metadatas=metadatas)
+
+    def query(self, embeddings, n_results=5):
+        results = self.collection.query(
+            query_embeddings=embeddings, n_results=n_results
+        )
+        docs = results["documents"][0]
+        metas = results["metadatas"][0]
+        return [{"document": d, "metadata": m} for d, m in zip(docs, metas)]
+
+
+
+
+class VectorDBCollectionsLister:
+    """
+    Lists ChromaDB collections for multiple database directories.
+    Unsupported DBs are skipped with a warning.
+    """
+
+    def __init__(self, db_paths: List[str]):
+        """
+        Args:
+            db_paths (List[str]): Paths to vector DB root folders (e.g. chroma_database, leann_database).
+        """
+        if not db_paths or not isinstance(db_paths, list):
+            raise ValueError("db_paths must be a non-empty list of valid folder paths.")
+        self.db_paths = db_paths
+
+    def list_collections(self) -> Dict[str, List[str]]:
+        """
+        Lists all supported DB collections.
+
+        Returns:
+            Dict[str, List[str]]: Mapping of DB folder name → list of collection names.
+        """
+        db_collections = {}
+
+        for db_path in self.db_paths:
+            if not os.path.exists(db_path):
+                warnings.warn(f"⚠️ Database folder does not exist: {db_path}")
+                continue
+
+            db_name = os.path.basename(db_path.rstrip("/\\"))
+
+            # === Handle Chroma ===
+            if "chroma" in db_name.lower():
+                if chromadb is None:
+                    warnings.warn("⚠️ ChromaDB not installed. Skipping Chroma database.")
+                    continue
+
+                try:
+                    client = chromadb.PersistentClient(path=db_path)
+                    collections = [col.name for col in client.list_collections()]
+                    db_collections[db_name] = collections
+                except Exception as e:
+                    warnings.warn(f"⚠️ Error listing Chroma collections in '{db_name}': {e}")
+
+            # === Fallback for unsupported DBs ===
+            else:
+                warnings.warn(f"⚠️ Unsupported DB type '{db_name}'. Only ChromaDB is currently supported.")
+                continue
+
+        return db_collections
