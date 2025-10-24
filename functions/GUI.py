@@ -7,7 +7,7 @@ from functions.support_functions import list_documents,build_file_summary_tree
 from settings.extraction_settings import SUPPORTED_SUFFIXES
 
 from utilities.paths import MAIN_DIR, TEMP_DIR
-
+from utilities.regex_patterns import check_input_validation
 
 
 
@@ -28,7 +28,7 @@ def upload_files_element(element_text="Upload PDF documents",allowed_types=["pdf
         return {}, [], False
 
     # Ensure unique files only with no duplicates
-    allowed_pattern = re.compile(r"^[A-Za-z0-9_\-\.]+$")
+    
     invalid_files = []
     valid_files = {}
     seen_filenames = set()
@@ -42,7 +42,8 @@ def upload_files_element(element_text="Upload PDF documents",allowed_types=["pdf
         seen_filenames.add(filename)
 
         # check filename pattern
-        if not allowed_pattern.match(filename):
+        pattern_check, _ = check_input_validation(text = filename, mode = "chars_and_numbers")
+        if pattern_check:
             invalid_files.append(filename)
         else:
             valid_files[filename] = file

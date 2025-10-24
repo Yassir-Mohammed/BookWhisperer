@@ -11,3 +11,4 @@ __pycache__/
 # Uploaded or temporary files
 temp/
 uploads/
+vector_database/

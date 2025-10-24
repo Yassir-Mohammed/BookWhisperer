@@ -1,12 +1,13 @@
 from functions.support_classes import JSONL_Master, MarkdownBookProcessor
-from functions.support_functions import list_documents,list_md_documents,initialize_temp_folder
+from functions.support_functions import list_documents,list_md_documents
 from settings.extraction_settings import SUPPORTED_SUFFIXES
+from utilities.paths import *
 from pipeline.extraction import parse_doc
 from pathlib import Path
 import os
 
 
-MAIN_DIR, TEMP_DIR, PARSED_DATA_PATH, SPLIT_DATA_PATH = initialize_temp_folder()
+
 
 def parse_documents_into_md():
     

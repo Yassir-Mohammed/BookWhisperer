@@ -3,7 +3,7 @@ from utilities.paths import *
 
 # Settings 
 from settings.transformation_settings import *
-from settings.vector_db_settings import DEFAULT_DB_TYPES
+from settings.vector_db_settings import DEFAULT_DB_TYPES,COLLECTION_META_DATA
 
 # General Imports
 import json
@@ -14,6 +14,7 @@ from collections import Counter
 from pathlib import Path
 from abc import ABC, abstractmethod
 import warnings
+from datetime import datetime, timezone
 
 # NLP Import 
 import spacy
@@ -433,8 +434,7 @@ class ChapterLoader:
 class VectorDBConnector(ABC):
 
     
-
-    def __init__(self,*, db_dir:str, collection_name: str, db_type: str = "chroma", overwrite: bool = False, **kwargs):
+    def __init__(self,*, db_dir:str, collection_name: str,collection_metadata:dict = None, db_type: str = "chroma", overwrite: bool = False, **kwargs):
         """
         Base constructor for vector DB connectors.
         Args:
@@ -444,12 +444,34 @@ class VectorDBConnector(ABC):
             kwargs: DB-specific parameters.
         """
         self.collection_name = collection_name
-        self.db_type = db_type.lower()
+        
         self.kwargs = kwargs
         self.connection = None
         self.collection = None
         self.db_dir = db_dir
 
+        
+
+
+        if collection_metadata is not None:
+            now = datetime.now(timezone.utc).date().isoformat()
+            # Ensure all required keys exist, updating date fields automatically
+            self.collection_metadata = {
+                "description": collection_metadata.get("description", ""),
+                "creation_date": now,
+                "collection_data_last_updated": now,
+                "collection_metadata_last_updated": now,
+            }
+        else:
+            now = datetime.now(timezone.utc).date().isoformat()
+            self.collection_metadata = {
+                "description": "",
+                "creation_date": now,
+                "collection_data_last_updated": "",
+                "collection_metadata_last_updated": "",
+            }
+
+        self.db_type = db_type.lower()
         # Validate database type
         if self.db_type not in DEFAULT_DB_TYPES:
             raise ValueError(f"Invalid db_type '{self.db_type}'. Must be one of {DEFAULT_DB_TYPES}.")
@@ -481,6 +503,11 @@ class VectorDBConnector(ABC):
         """Query the collection with an embedding vector."""
         pass
 
+    @abstractmethod
+    def update_collection_metadata(self, meta_data):
+        """update the collection metadata"""
+        pass
+
 #Chroma connector
 class ChromaConnector(VectorDBConnector):
     def connect(self):
@@ -499,7 +526,9 @@ class ChromaConnector(VectorDBConnector):
 
         self.collection = self.connection.get_or_create_collection(
             name=self.collection_name,
-            embedding_function=self.embedding_function
+            embedding_function=self.embedding_function,
+            metadata=  self.collection_metadata
+            
         )
         return self.collection
 
@@ -513,6 +542,21 @@ class ChromaConnector(VectorDBConnector):
         docs = results["documents"][0]
         metas = results["metadatas"][0]
         return [{"document": d, "metadata": m} for d, m in zip(docs, metas)]
+    
+    def update_collection_metadata(self, meta_data: dict):
+        """Update the collection metadata, ignoring creation_date and None values."""
+        
+        
+        filtered_meta = {k: v for k, v in meta_data.items() if v is not None and k in self.collection_metadata}
+        self.collection_metadata["collection_metadata_last_updated"] = datetime.now(timezone.utc).date().isoformat()
+
+        self.collection_metadata.update(filtered_meta)
+
+        self.collection.modify(metadata=self.collection_metadata)
+
+        
+        
+
 
 
 
