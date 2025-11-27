@@ -113,33 +113,35 @@ def build_file_summary_tree(input_documents, invalid_files, already_committed, n
     # Start the tree
     tree_lines = [f"📦 Uploaded files: {total_uploaded}"]
 
-    # Invalid files
-    tree_lines += _format_tree_section(
-        f"❌ Invalid: {invalid_count}",
-        invalid_files,
-        prefix_main="├──",
-        branch_mid="│   ├──",
-        branch_last="│   └──"
-    )
+    if invalid_count > 0:
+        # Invalid files
+        tree_lines += _format_tree_section(
+            f"❌ Invalid: {invalid_count}",
+            invalid_files,
+            prefix_main="├──",
+            branch_mid="│   ├──",
+            branch_last="│   └──"
+        )
+    if committed_count > 0:
+        # Already committed files
+        tree_lines += _format_tree_section(
+            f"⚠️ Already committed: {committed_count}",
+            already_committed,
+            prefix_main="├──",
+            branch_mid="│   ├──",
+            branch_last="│   └──"
+        )
 
-    # Already committed files
-    tree_lines += _format_tree_section(
-        f"⚠️ Already committed: {committed_count}",
-        already_committed,
-        prefix_main="├──",
-        branch_mid="│   ├──",
-        branch_last="│   └──"
-    )
-
-    # Ready to commit files (final branch)
-    lines_ready = _format_tree_section(
-        f"🆕 Ready to commit: {ready_count}",
-        list(new_files_to_commit.keys()),
-        prefix_main="└──",
-        branch_mid="    ├──",
-        branch_last="    └──"
-    )
-    tree_lines += lines_ready
+    if ready_count > 0:
+        # Ready to commit files (final branch)
+        lines_ready = _format_tree_section(
+            f"🆕 Ready to commit: {ready_count}",
+            list(new_files_to_commit.keys()),
+            prefix_main="└──",
+            branch_mid="    ├──",
+            branch_last="    └──"
+        )
+        tree_lines += lines_ready
 
     tree_text = "\n".join(tree_lines)
 

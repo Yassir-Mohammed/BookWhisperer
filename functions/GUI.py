@@ -89,7 +89,7 @@ def upload_files_element(element_text="Upload PDF documents",allowed_types=["pdf
                 new_files_to_commit=new_files_to_commit,
             )
 
-            st.info(summary_text)
+            st.markdown(summary_text)
  
             with btn_container:
                 commit_btn = st.button("📥 Commit the documents", use_container_width=True, disabled= commit_btn_disable)
