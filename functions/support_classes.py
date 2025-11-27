@@ -556,12 +556,44 @@ class ChromaConnector(VectorDBConnector):
 
         
         
+    def delete_by_metadata(self, filters: dict):
+        """
+        Delete all entries that match the given metadata filters.
+        Example: filters={"source": "pdf1"} will delete all items
+        where metadata["source"] equals "pdf1".
+        """
+
+        if not isinstance(filters, dict):
+            raise ValueError("Filters must be a dictionary of metadata keys and values")
+
+        try:
+            self.collection.delete(where=filters)
+            return True
+        except Exception as exc:
+            return False
+    
+    def get_collection_data(self):
+        """
+        Return every record in the collection except embeddings.
+        Only ids, documents, and metadata are returned.
+        """
+        
+        # excludes "embeddings"
+        results = self.collection.get(include=["documents", "metadatas"])       
+
+        items = []
+        ids = results.get("ids", [])
+        docs = results.get("documents", [])
+        metas = results.get("metadatas", [])
+
+        items = [{"id": i, "document": d, "metadata": m} for i, d, m in zip(ids, docs, metas)]
+
+        return items
 
 
 
 
-
-class VectorDBCollectionsLister:
+class VectorDBCollectionsEditor:
     """
     Lists ChromaDB collections for multiple database directories.
     Unsupported DBs are skipped with a warning.

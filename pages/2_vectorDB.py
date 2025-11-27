@@ -1,7 +1,7 @@
 import streamlit as st
 from functions.GUI import upload_files_element
 from utilities.vectordb_initialization import initialize_vector_dbs
-from functions.support_classes import VectorDBCollectionsLister, ChromaConnector
+from functions.support_classes import VectorDBCollectionsEditor, ChromaConnector
 from utilities.paths import CHROMA_PATH
 from utilities.regex_patterns import check_input_validation
 import re
@@ -16,12 +16,12 @@ st.set_page_config(page_title="Vector DB Catalog", page_icon="💾", layout="cen
 st.title("🎓 Vector DB Catalog")
 
 # List available collections
-lister = VectorDBCollectionsLister([CHROMA_PATH])
+lister = VectorDBCollectionsEditor([CHROMA_PATH])
 collections_dict = lister.list_collections()
 
-# Debug/inspection (optional)
+
 st.subheader("📂 Available Databases & Collections")
-st.json(collections_dict)
+
 
 if collections_dict:
     # Layout with two side-by-side dropdowns
@@ -80,3 +80,19 @@ if collections_dict:
 
 else:
     st.warning("⚠️ No databases or collections found. Please initialize or upload one.")
+
+
+if selected_collection:
+    
+    st.subheader("📂 Edit Databases & Collections")
+
+    chroma_db = ChromaConnector(collection_name = selected_collection, db_type="chroma", db_dir = CHROMA_PATH)
+    
+    collection_data = chroma_db.get_collection_data()
+    
+
+    to_be_deleted = st.multiselect(label = "To be deleted records", options  = collection_data)
+    
+
+
+    
