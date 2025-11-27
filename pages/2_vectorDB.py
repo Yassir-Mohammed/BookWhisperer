@@ -56,21 +56,26 @@ if collections_dict:
 
         name_pattern_check, name_pattern_message = check_input_validation(text = new_collection_name, mode = "chars_and_numbers", allow_spaces = False)
         description_pattern_check, description_pattern_message = check_input_validation(text = new_collection_description, mode = "chars_and_numbers", allow_spaces = True)
-        if not name_pattern_check:
-            st.error(name_pattern_message)
-        elif not description_pattern_check:
-            st.error(description_pattern_message)
-        elif new_collection_name in collection_names:
-            st.error("Please select a valid new name")
+        
+        # Validate inputs
+        errors = []
 
-        else:
-            if st.button("create collection"):    
-                chroma_db = ChromaConnector(
-                            collection_name = new_collection_name,
-                            db_dir = CHROMA_PATH,
-                            db_type="chroma",
-                            metadata = {"description":new_collection_description}
-                        )
+        if not name_pattern_check: errors.append(f"Collection Name: {name_pattern_message}")
+        if not description_pattern_check: errors.append(f"Description: {description_pattern_message}")
+        if new_collection_name in collection_names: errors.append("Please select a valid new name")
+        
+        
+        for e in errors:
+            st.error(e)
+
+
+        if st.button("create collection", disabled=len(errors) > 0):    
+            chroma_db = ChromaConnector(
+                        collection_name = new_collection_name,
+                        db_dir = CHROMA_PATH,
+                        db_type="chroma",
+                        metadata = {"description":new_collection_description}
+                    )
 
 
 else:
