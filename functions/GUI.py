@@ -43,7 +43,7 @@ def upload_files_element(element_text="Upload PDF documents",allowed_types=["pdf
 
         # check filename pattern
         pattern_check, _ = check_input_validation(text = filename, mode = "chars_and_numbers")
-        if pattern_check:
+        if not pattern_check:
             invalid_files.append(filename)
         else:
             valid_files[filename] = file

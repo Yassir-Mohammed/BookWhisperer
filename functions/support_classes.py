@@ -125,9 +125,7 @@ class MarkdownBookProcessor:
             print("Loading spaCy model (once)...")
             cls._shared_nlp = spacy.load("en_core_web_sm")
         return cls._shared_nlp
-    # -------------------------
-    # Internal helper methods
-    # -------------------------
+
     def _load_file(self) -> str:
         with open(self.md_path, "r", encoding="utf-8-sig") as f:
             return f.read()
@@ -135,8 +133,6 @@ class MarkdownBookProcessor:
     def _clean_header_text(self, s: str) -> str:
         return re.sub(r'[\s:]+$', '', s).strip()
 
-
-    
     def _clean_text_for_embedding(self, text: str) -> str:
 
         # Remove image references like (images/XXXX.jpg) where XXXX can be anything
@@ -193,9 +189,7 @@ class MarkdownBookProcessor:
             })
         return chapters
 
-    # -------------------------
-    # Public methods
-    # -------------------------
+
     def split_into_chapters(self):
         book_title = str(os.path.splitext(os.path.basename(self.md_path))[0])
 
@@ -526,14 +520,25 @@ class ChromaConnector(VectorDBConnector):
 
         self.collection = self.connection.get_or_create_collection(
             name=self.collection_name,
-            embedding_function=self.embedding_function,
+      
             metadata=  self.collection_metadata
             
         )
         return self.collection
 
     def add_documents(self, ids, embeddings, metadatas):
-        self.collection.add(ids=ids, embeddings=embeddings, metadatas=metadatas)
+        try:
+            print("adding collection from ChromaConnector class")
+            self.collection.add(
+                ids=ids,
+                embeddings=embeddings,
+                metadatas=metadatas
+            )
+        except Exception as e:
+            print("Failed to add document to Chroma")
+            print(f"IDs: {ids}")
+            print(f"Metadatas: {metadatas}")
+            print(f"Error: {e}")
 
     def query(self, embeddings, n_results=5):
         results = self.collection.query(

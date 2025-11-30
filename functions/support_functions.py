@@ -2,6 +2,7 @@ from pathlib import Path
 import os
 import re
 
+from settings.transformation_settings import SEQUENCE_LENGTH, TEXT_OVERLAP_RATIO
 
 
 def list_documents(folder_path, extensions=['pdf']):
@@ -75,7 +76,7 @@ def list_md_documents(folder_path, extensions=['md']):
         if any(re.search(r'[A-Z]', part) for part in root_path.parts):
             for file in sorted(files):
                 file_path = root_path / file
-                if file_path.suffix.lower() in extensions and re.search(r'[A-Z]', file_path.stem):
+                if file_path.suffix.lower() in extensions:
                     doc_list.append({
                         "name": file_path.name,
                         "path": Path(str(file_path.resolve()))
@@ -153,3 +154,90 @@ def build_file_summary_tree(input_documents, invalid_files, already_committed, n
     )
 
     return summary_text
+
+
+def chunk_text(text, seq_len=SEQUENCE_LENGTH, overlap_ratio=TEXT_OVERLAP_RATIO):
+    """
+    Split text into overlapping chunks.
+    Args:
+        text (str): input text.
+        seq_len (int): max tokens/words per chunk.
+        overlap_ratio (float): fraction of overlap between chunks.
+    Returns:
+        List[str]: list of text chunks.
+    """
+    words = text.split()
+    if not words:
+        return []
+    
+    overlap = int(seq_len * overlap_ratio)
+    chunks = []
+    start = 0
+
+    while start < len(words):
+        end = min(start + seq_len, len(words))
+        chunk = " ".join(words[start:end])
+        chunks.append(chunk)
+        if end == len(words):
+            break
+        start += seq_len - overlap
+
+    return chunks
+
+def estimate_batch_size(model, sample_text="test text"):
+    
+    import psutil
+    from sentence_transformers import SentenceTransformer
+
+    try:
+        import torch
+        gpu_available = torch.cuda.is_available()
+    except ImportError:
+        gpu_available = False
+    
+    # Rough size per embedding vector
+    dummy = model.encode([sample_text])
+    vector_size = dummy[0].nbytes
+
+    #batch about 5 percent of free memory
+    memory_fraction = 0.05
+
+    if gpu_available:
+        free_bytes = torch.cuda.mem_get_info()[0]
+    else:
+        free_bytes = psutil.virtual_memory().available
+
+    budget = free_bytes * memory_fraction
+    batch = int(budget // vector_size)
+
+    if batch < 1:
+        batch = 1
+    if batch > 512:
+        batch = 512
+
+    return batch,"cuda" if gpu_available else "cpu"
+
+def get_key_value(dictionary:dict, key:str|int, expected_type=str):
+    value = dictionary.get(key)
+
+    if value is None or value == "":
+        raise ValueError(f"Missing required field: {key}")
+
+    # Validate or convert type
+    try:
+        if expected_type is str:
+            return str(value)
+        if expected_type is int:
+            return int(value)
+        if expected_type is float:
+            return float(value)
+    except Exception:
+        raise ValueError(f"Field {key} must be of type {expected_type.__name__}")
+
+    # Fallback if type not recognized
+    return value
+
+
+def build_id(*parts):
+    cleaned = [str(p) for p in parts if p not in (None, "")]
+    return "_".join(cleaned)

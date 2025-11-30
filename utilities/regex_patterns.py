@@ -61,6 +61,7 @@ def check_input_validation(
         allowed += ", and spaces"
 
     # Pattern validation
+   
     if not pattern.match(text):
         return False, f"Invalid input '{text}'. Allowed characters: {allowed}."
 
