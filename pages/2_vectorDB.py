@@ -6,6 +6,7 @@ from utilities.paths import CHROMA_PATH
 from utilities.regex_patterns import check_input_validation
 import re
 
+
 # Initialize vector DBs (creates default if not present)
 initialize_vector_dbs()
 

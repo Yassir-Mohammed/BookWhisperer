@@ -22,6 +22,8 @@ import spacy
 # ChromaDB imports
 import chromadb
 from chromadb.utils import embedding_functions
+import inspect
+
 
 
 
@@ -46,12 +48,14 @@ class JSONL_Master:
         Returns:
             list of dict: Loaded documents.
         """
+        func_name = inspect.currentframe().f_code.co_name
+
         self.data = []
         if not os.path.exists(file_path):
             # Create empty file
             with open(file_path, "w", encoding="utf-8") as f:
                 pass
-            print(f"File '{file_path}' did not exist and was created as an empty JSONL file.")
+            print(f"{func_name}: File '{file_path}' did not exist and was created as an empty JSONL file.")
         else:
             with open(file_path, "r", encoding="utf-8") as f:
                 for line in f:
@@ -120,9 +124,10 @@ class MarkdownBookProcessor:
     @classmethod
     def _get_shared_nlp(cls):
         """Load the shared spaCy model once and reuse it across all instances."""
+        func_name = inspect.currentframe().f_code.co_name
         if cls._shared_nlp is None:
             import spacy
-            print("Loading spaCy model (once)...")
+            print(f"{func_name}: Loading spaCy model (once)...")
             cls._shared_nlp = spacy.load("en_core_web_sm")
         return cls._shared_nlp
 
@@ -252,11 +257,13 @@ class MarkdownBookProcessor:
         - lowercase normalization
         - removal of entities with file extensions (e.g., .jpg, .png)
         """
+
+        func_name = inspect.currentframe().f_code.co_name
         # Validate allowed entity labels
         permitted_entities = set(self.nlp.get_pipe("ner").labels)
         valid_entity_types = [e for e in entity_types if e in permitted_entities]
         if not valid_entity_types:
-            raise ValueError(f"No valid entity types provided. Permitted: {permitted_entities}")
+            raise ValueError(f"{func_name}: No valid entity types provided. Permitted: {permitted_entities}")
 
         stopwords = self.nlp.Defaults.stop_words
         file_extensions = NER_DEFAULT_EXTENSION_TO_REMOVE
@@ -338,6 +345,7 @@ class MarkdownBookProcessor:
 
 
     def save_chapters_as_json(self, output_dir: str):
+        func_name = inspect.currentframe().f_code.co_name
         os.makedirs(output_dir, exist_ok=True)
         base_name = os.path.splitext(os.path.basename(self.md_path))[0]
        
@@ -351,7 +359,7 @@ class MarkdownBookProcessor:
             with open(filepath, "w", encoding="utf-8") as f:
                 json.dump(ch, f, ensure_ascii=False, indent=2)
 
-        print(f"Saved {len(self.chapters)} chapters as JSON to {output_dir}")
+        print(f"{func_name}: Saved {len(self.chapters)} chapters as JSON to {output_dir}")
 
 
 class ChapterLoader:
