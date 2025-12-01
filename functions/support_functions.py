@@ -1,11 +1,11 @@
 from pathlib import Path
 import os
 import re
-
+import shutil
 from settings.transformation_settings import SEQUENCE_LENGTH, TEXT_OVERLAP_RATIO
+import inspect
 
-
-def list_documents(folder_path, extensions=['pdf']):
+def list_documents(folder_path:str, extensions=['pdf']) -> list[dict]:
     """
     Scan a folder and return a list of documents with specified extensions.
     
@@ -43,7 +43,7 @@ def list_documents(folder_path, extensions=['pdf']):
 
 
 
-def list_md_documents(folder_path, extensions=['md']):
+def list_md_documents(folder_path:str, extensions:list[str] = None) -> list[dict]:
     """
     Scan a folder and return a list of documents with specified extensions
     where the folder or file name contains uppercase letters (pattern in UPPERCASE).
@@ -59,6 +59,9 @@ def list_md_documents(folder_path, extensions=['md']):
             - name: name of the file
             - path: full absolute path to the file
     """
+    if extensions is None:
+        extensions = ["md"]
+    
     folder_path = Path(folder_path)
     if not folder_path.exists() or not folder_path.is_dir():
         raise ValueError(f"The path '{folder_path}' is not a valid directory.")
@@ -87,7 +90,7 @@ def list_md_documents(folder_path, extensions=['md']):
 
 
 
-def build_file_summary_tree(input_documents, invalid_files, already_committed, new_files_to_commit):
+def build_file_summary_tree(input_documents, invalid_files, already_committed, new_files_to_commit) -> str:
     """
     Build a hierarchical tree summary of uploaded files and their categories.
     Returns a formatted string (Markdown-safe) that can be passed to st.info().
@@ -156,7 +159,7 @@ def build_file_summary_tree(input_documents, invalid_files, already_committed, n
     return summary_text
 
 
-def chunk_text(text, seq_len=SEQUENCE_LENGTH, overlap_ratio=TEXT_OVERLAP_RATIO):
+def chunk_text(text, seq_len=SEQUENCE_LENGTH, overlap_ratio=TEXT_OVERLAP_RATIO) -> list[str]:
     """
     Split text into overlapping chunks.
     Args:
@@ -184,7 +187,7 @@ def chunk_text(text, seq_len=SEQUENCE_LENGTH, overlap_ratio=TEXT_OVERLAP_RATIO):
 
     return chunks
 
-def estimate_batch_size(model, sample_text="test text"):
+def estimate_batch_size(model, sample_text="test text") -> tuple[int, str]:
     
     import psutil
     from sentence_transformers import SentenceTransformer
@@ -217,7 +220,7 @@ def estimate_batch_size(model, sample_text="test text"):
 
     return batch,"cuda" if gpu_available else "cpu"
 
-def get_key_value(dictionary:dict, key:str|int, expected_type=str):
+def get_key_value(dictionary:dict, key:str|int, expected_type=str) -> str | int | float:
     value = dictionary.get(key)
 
     if value is None or value == "":
@@ -238,6 +241,27 @@ def get_key_value(dictionary:dict, key:str|int, expected_type=str):
     return value
 
 
-def build_id(*parts):
+def build_id(*parts:str | None) -> str:
     cleaned = [str(p) for p in parts if p not in (None, "")]
     return "_".join(cleaned)
+
+
+def clear_folder_contents(path:str) -> None:
+
+    func_name = inspect.currentframe().f_code.co_name
+
+    if not os.path.isdir(path):
+        raise ValueError(f"{func_name}: {path} is not a valid folder")
+    
+    print(f"{func_name}: Attempting to clear contents of {path}")
+
+    for item in os.listdir(path):
+        item_path = os.path.join(path, item)
+        try:
+            if os.path.isfile(item_path) or os.path.islink(item_path):
+                os.remove(item_path)
+            elif os.path.isdir(item_path):
+                shutil.rmtree(item_path)
+            print(f"{func_name}: files in {path} have been deleted")
+        except Exception as exc:
+            print(f"{func_name}: Could not delete {item_path}: {exc}")

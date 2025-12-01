@@ -1,5 +1,5 @@
 from functions.support_classes import JSONL_Master, MarkdownBookProcessor, ChapterLoader, ChromaConnector
-from functions.support_functions import list_documents,list_md_documents, chunk_text, estimate_batch_size, get_key_value, build_id
+from functions.support_functions import list_documents,list_md_documents, chunk_text, estimate_batch_size, get_key_value, build_id, clear_folder_contents
 from settings.extraction_settings import SUPPORTED_SUFFIXES
 from settings.transformation_settings import SEQUENCE_LENGTH, TEXT_OVERLAP_RATIO, EMBEDDING_MODELS,NORMALIZE_EMBEDDINGS
 from utilities.paths import *
@@ -194,7 +194,15 @@ def generate_chunks_embedding(*,collection_name,  model_name = EMBEDDING_MODELS[
                 print(f"{func_name}: failed to write chunk ({i}/{total_chunks})\n")
                 print(f"ID: {unique_id}")
                 print(f"Error: {exc}")
-        
+
+            try:
+                # Removing the PDF files
+                clear_folder_contents(path = RAW_DATA_DIR)
+                # Removing the parsed PDF files (markdowns and layouts)
+                clear_folder_contents(path = PARSED_DATA_DIR)
+            except Exception as exc:
+                print(f"{func_name}: failed to clear folders contents")
+
 
 
     return 
