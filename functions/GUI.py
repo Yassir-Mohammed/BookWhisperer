@@ -9,6 +9,7 @@ from settings.extraction_settings import SUPPORTED_SUFFIXES
 from utilities.paths import MAIN_DIR, TEMP_DIR
 from utilities.regex_patterns import check_input_validation
 
+import inspect
 
 
 def upload_files_element(element_text="Upload PDF documents",allowed_types=["pdf"],accept_multiple_files=True):
@@ -20,6 +21,7 @@ def upload_files_element(element_text="Upload PDF documents",allowed_types=["pdf
       3. Ready to commit (new)
     Returns (saved_files, invalid_files, committed_flag)
     """
+    func_name = inspect.currentframe().f_code.co_name
 
     input_documents = st.file_uploader(element_text,accept_multiple_files=accept_multiple_files,type=allowed_types)
     commit_btn_disable = True
@@ -103,16 +105,22 @@ def upload_files_element(element_text="Upload PDF documents",allowed_types=["pdf
             saved_files = {}
             for filename, file in new_files_to_commit.items():
                 save_path = os.path.join(RAW_DATA_DIR, filename)
-                with open(save_path, "wb") as f:
-                    f.write(file.read())
-                saved_files[filename] = save_path
+                try:
+                    print(f"{func_name}: committing {filename}")
+                    with open(save_path, "wb") as f:
+                        f.write(file.read())
+                    saved_files[filename] = save_path
+                except Exception as exc:
+                    print(f"{func_name}: Failed to save {filename}: {exc}")
+
 
             # Update JSON tracker
-            documents_list = list_documents(folder_path=RAW_DATA_DIR, extensions=SUPPORTED_SUFFIXES)
-            json_handler.save(file_path=asset_json_file_tracker, new_data=documents_list)
+            documents_dict = list_documents(folder_path=RAW_DATA_DIR, extensions=SUPPORTED_SUFFIXES)
+            json_handler.save(file_path=asset_json_file_tracker, new_data=documents_dict)
 
             with msg_container:
                 st.success(f"✅ {len(saved_files)} new PDF file(s) committed successfully to `{RAW_DATA_DIR}`")
+                print(f"{func_name}: {len(saved_files)} new PDF file(s) committed successfully to `{RAW_DATA_DIR}`")
 
             # Collapse the expander
             st.session_state.expander_open = False

@@ -136,7 +136,7 @@ def build_file_summary_tree(input_documents, invalid_files, already_committed, n
     if ready_count > 0:
         # Ready to commit files (final branch)
         lines_ready = _format_tree_section(
-            f"🆕 Ready to commit: {ready_count}",
+            f"✅ Ready to commit: {ready_count}",
             list(new_files_to_commit.keys()),
             prefix_main="└──",
             branch_mid="    ├──",

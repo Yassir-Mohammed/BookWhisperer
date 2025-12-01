@@ -90,7 +90,7 @@ def split_parsed_documents_into_chunks():
                 f"in {doc_path}\n"
                 f"could not be splitted due to {exc}"
             )
-    print("{func_name}: Splitting documents is finished.")
+    print(f"{func_name}: Splitting documents is finished.")
 
 
 
