@@ -1,4 +1,6 @@
 import re
+import inspect
+import streamlit as st
 
 # Pre-compile the regex
 CHARS_NUMBERS_PATTERN = re.compile(r"^[A-Za-z0-9_\-\.]+$")
@@ -16,11 +18,7 @@ MODE_ONLY_CHARS = "only_chars"
 MODE_ONLY_NUMS = "only_numbers"
 
 
-def check_input_validation(
-    text: str, 
-    mode: str, 
-    allow_spaces: bool = False
-) -> tuple[bool, str]:
+def check_input_validation(text: str, mode: str, allow_spaces: bool = False, print_errors:bool = False, error_suffix:str | None = None) -> tuple[bool, str]:
     """
     Validates input text based on the selected mode, length, and space allowance.
 
@@ -35,11 +33,28 @@ def check_input_validation(
             - is_valid (bool): True if input passes all checks, else False.
             - error_message (str): Explanation if invalid, or empty string if valid.
     """
+
+    func_name = inspect.currentframe().f_code.co_name
+
     # Basic checks
     if not text or text.strip() == "":
-        return False, "Input cannot be empty."
+        if error_suffix:
+            error_message = f"{error_suffix}: Input cannot be empty."
+        else:
+            error_message = "Input cannot be empty."
+
+        if print_errors:
+            st.error(error_message)
+        return False, error_message
+    
     if len(text.strip()) < 4:
-        return False, "Input must be at least 4 characters long."
+        if error_suffix:
+            error_message = f"{error_suffix}: Input must be at least 4 characters long."
+        else:
+            error_message = "Input must be at least 4 characters long."
+        if print_errors:
+            st.error(error_message)
+        return False, error_message
 
     # Select appropriate regex and allowed characters description
     if mode == MODE_CHARS_NUMS:
@@ -53,7 +68,7 @@ def check_input_validation(
         allowed = "numbers only (0–9)"
     else:
         raise ValueError(
-            f"Invalid mode: '{mode}'. Must be one of: "
+            f"{func_name}: Invalid mode: '{mode}'. Must be one of: "
             f"'{MODE_CHARS_NUMS}', '{MODE_ONLY_CHARS}', or '{MODE_ONLY_NUMS}'."
         )
 
@@ -63,6 +78,12 @@ def check_input_validation(
     # Pattern validation
    
     if not pattern.match(text):
-        return False, f"Invalid input '{text}'. Allowed characters: {allowed}."
+        if error_suffix:
+            error_message = f"{error_suffix}: Invalid input '{text}'. Allowed characters: {allowed}."
+        else:
+            error_message = f"Invalid input '{text}'. Allowed characters: {allowed}."
+        if print_errors:
+            st.error(error_message)
+        return False, error_message
 
     return True, ""

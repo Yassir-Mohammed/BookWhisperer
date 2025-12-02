@@ -526,12 +526,7 @@ class ChromaConnector(VectorDBConnector):
             except Exception:
                 pass
 
-        self.collection = self.connection.get_or_create_collection(
-            name=self.collection_name,
-      
-            metadata=  self.collection_metadata
-            
-        )
+        self.collection = self.connection.get_or_create_collection(name=self.collection_name, metadata = self.collection_metadata)
         return self.collection
 
     def add_documents(self, ids, embeddings, metadatas):

@@ -1,14 +1,13 @@
 import streamlit as st
-from functions.GUI import upload_files_element
+from functions.GUI import upload_files_element,create_or_select_collection
 from utilities.vectordb_initialization import initialize_vector_dbs
 from functions.support_classes import VectorDBCollectionsEditor, ChromaConnector
 from utilities.paths import CHROMA_PATH
-from utilities.regex_patterns import check_input_validation
-import re
 
 
-# Initialize vector DBs (creates default if not present)
-initialize_vector_dbs()
+
+
+selected_collection = None
 
 # Streamlit page config
 st.set_page_config(page_title="Vector DB Catalog", page_icon="💾", layout="centered")
@@ -16,84 +15,18 @@ st.set_page_config(page_title="Vector DB Catalog", page_icon="💾", layout="cen
 # Page title
 st.title("🎓 Vector DB Catalog")
 
-# List available collections
-lister = VectorDBCollectionsEditor([CHROMA_PATH])
-collections_dict = lister.list_collections()
-
-
-st.subheader("📂 Available Databases & Collections")
-
-
-if collections_dict:
-    # Layout with two side-by-side dropdowns
-    db_col, collection_col = st.columns(2)
-
-    with db_col:
-        db_names = list(collections_dict.keys())
-        selected_db = st.selectbox("Select a database:",options=db_names,index=None,placeholder="Choose a database...")
-
-    with collection_col:
-        if selected_db:
-            collection_names = ["Create a new collection"] + collections_dict.get(selected_db, [])
-             
-            if collection_names:
-                selected_collection = st.selectbox("Select a collection:",options=collection_names,index=None,placeholder="Choose a collection...")
-            else:
-                st.info("No collections found in this database.")
-                selected_collection = None
-        else:
-            selected_collection = st.selectbox("Select a collection:",options=[],index=None,placeholder="Select a database first...",disabled=True)
-
-    if selected_collection == "Create a new collection":
-        new_collection_name_col,new_collection_metadata_col = st.columns(2)
-
-        with new_collection_name_col:
-            new_collection_name = st.text_input(label="New collection name")
-        with new_collection_metadata_col:
-            new_collection_description = st.text_input(label="New collection description", placeholder = "description up to 100 chars only")
-            new_collection_description = str(new_collection_description)[:100]
+selected_collection = create_or_select_collection(vectorDB_path = CHROMA_PATH, create_collection_automatically = False)
 
 
 
-        name_pattern_check, name_pattern_message = check_input_validation(text = new_collection_name, mode = "chars_and_numbers", allow_spaces = False)
-        description_pattern_check, description_pattern_message = check_input_validation(text = new_collection_description, mode = "chars_and_numbers", allow_spaces = True)
-        
-        # Validate inputs
-        errors = []
-
-        if not name_pattern_check: errors.append(f"Collection Name: {name_pattern_message}")
-        if not description_pattern_check: errors.append(f"Description: {description_pattern_message}")
-        if new_collection_name in collection_names: errors.append("Please select a valid new name")
-        
-        
-        for e in errors:
-            st.error(e)
-
-
-        if st.button("create collection", disabled=len(errors) > 0):    
-            chroma_db = ChromaConnector(
-                        collection_name = new_collection_name,
-                        db_dir = CHROMA_PATH,
-                        db_type="chroma",
-                        metadata = {"description":new_collection_description}
-                    )
-
-
-else:
-    st.warning("⚠️ No databases or collections found. Please initialize or upload one.")
-
-
-if selected_collection:
-    
+if (selected_collection) and (selected_collection != "Create a new collection"):
     st.subheader("📂 Edit Databases & Collections")
 
     chroma_db = ChromaConnector(collection_name = selected_collection, db_type="chroma", db_dir = CHROMA_PATH)
-    
+        
     collection_data = chroma_db.get_collection_data()
-    
+        
 
     to_be_deleted = st.multiselect(label = "To be deleted records", options  = collection_data)
-    
+        
 
-
-    
