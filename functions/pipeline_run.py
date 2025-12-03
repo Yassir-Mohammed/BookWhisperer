@@ -149,7 +149,7 @@ def generate_chunks_embedding(*,collection_name,  model_name = EMBEDDING_MODELS[
 
 
 
-        print(f"{func_name}: Chunking file ({j}/{total_documents})")
+        print(f"{func_name}: Chunking file {book_title} ({j}/{total_documents})")
                
         # Split chunks (chapters) into SEQUENCE_LENGTH-sized text with overlap of TEXT_OVERLAP_RATIO%
         chunks = chunk_text(text, seq_len = SEQUENCE_LENGTH, overlap_ratio = TEXT_OVERLAP_RATIO)
@@ -195,13 +195,13 @@ def generate_chunks_embedding(*,collection_name,  model_name = EMBEDDING_MODELS[
                 print(f"ID: {unique_id}")
                 print(f"Error: {exc}")
 
-            try:
-                # Removing the PDF files
-                clear_folder_contents(path = RAW_DATA_DIR)
-                # Removing the parsed PDF files (markdowns and layouts)
-                clear_folder_contents(path = PARSED_DATA_DIR)
-            except Exception as exc:
-                print(f"{func_name}: failed to clear folders contents")
+        try:
+            # Removing the PDF files
+            clear_folder_contents(path = RAW_DATA_DIR)
+            # Removing the parsed PDF files (markdowns and layouts)
+            clear_folder_contents(path = PARSED_DATA_DIR)
+        except Exception as exc:
+            print(f"{func_name}: failed to clear folders contents")
 
 
 

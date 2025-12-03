@@ -31,8 +31,10 @@ with st.expander("Select or Create Collection"):
     selected_collection = create_or_select_collection(vectorDB_path = CHROMA_PATH, create_collection_automatically = False)
 
 collection_ready_flag = True if selected_collection is not None else False
-
-if st.button("Study Documents", type="secondary", disabled=not(document_parsing_flag and collection_ready_flag)):
+st.markdown(f"{document_parsing_flag = }")
+st.markdown(f"{collection_ready_flag = }")
+#if st.button("Study Documents", type="secondary", disabled=not(document_parsing_flag and collection_ready_flag)):
+if st.button("Study Documents", type="secondary", disabled=False):
     try:
         # Create a status box
         with st.status("Starting document processing...", expanded=True) as status:
