@@ -137,7 +137,7 @@ def generate_chunks_embedding(*,collection_name,  model_name = EMBEDDING_MODELS[
         data = loader.load_json(file_path)
             
         book_title = get_key_value(dictionary = data, key="book_title", expected_type=str)
-        text = get_key_value(dictionary = data, key="body", expected_type=str)
+        text = data.get("body") or ""
 
         section_title = data.get("title") or ""
         start_index = int(data.get("start") or 0)
@@ -157,7 +157,9 @@ def generate_chunks_embedding(*,collection_name,  model_name = EMBEDDING_MODELS[
         total_chunks = len(chunks) - 1
         for i, chunk_text_str in enumerate(chunks):
             
-            
+            if chunk_text_str == "" or None:
+                continue 
+
             unique_id = build_id(book_title,section_title,i)
 
             meta_data = {
@@ -195,13 +197,13 @@ def generate_chunks_embedding(*,collection_name,  model_name = EMBEDDING_MODELS[
                 print(f"ID: {unique_id}")
                 print(f"Error: {exc}")
 
-        try:
-            # Removing the PDF files
-            clear_folder_contents(path = RAW_DATA_DIR)
-            # Removing the parsed PDF files (markdowns and layouts)
-            clear_folder_contents(path = PARSED_DATA_DIR)
-        except Exception as exc:
-            print(f"{func_name}: failed to clear folders contents")
+    try:
+        # Removing the PDF files
+        clear_folder_contents(path = RAW_DATA_DIR)
+        # Removing the parsed PDF files (markdowns and layouts)
+        clear_folder_contents(path = PARSED_DATA_DIR)
+    except Exception as exc:
+        print(f"{func_name}: failed to clear folders contents")
 
 
 

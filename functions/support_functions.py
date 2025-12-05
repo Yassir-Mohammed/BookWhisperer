@@ -221,7 +221,7 @@ def estimate_batch_size(model, sample_text="test text") -> tuple[int, str]:
     return batch,"cuda" if gpu_available else "cpu"
 
 def get_key_value(dictionary:dict, key:str|int, expected_type=str) -> str | int | float:
-    value = dictionary.get(key)
+    value = dictionary.get(key, None)
 
     if value is None or value == "":
         raise ValueError(f"Missing required field: {key}")
