@@ -597,6 +597,18 @@ class ChromaConnector(VectorDBConnector):
         items = [{"id": i, "document": d, "metadata": m} for i, d, m in zip(ids, docs, metas)]
 
         return items
+    
+    def delete_collection(self, collection_name:str):
+        """
+        Delete the entire collection from the vector store.
+        This removes all documents and metadata for this collection.
+        """
+        try:
+            self.connection.delete_collection(name = collection_name)
+            return True
+        except Exception as exc:
+            print(f"Failed to delete collection: {exc}")
+            return False
 
 
 

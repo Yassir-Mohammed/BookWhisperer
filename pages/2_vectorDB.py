@@ -22,11 +22,27 @@ selected_collection = create_or_select_collection(vectorDB_path = CHROMA_PATH, c
 if (selected_collection) and (selected_collection != "Create a new collection"):
     st.subheader("📂 Edit Databases & Collections")
 
-    chroma_db = ChromaConnector(collection_name = selected_collection, db_type="chroma", db_dir = CHROMA_PATH)
-        
-    collection_data = chroma_db.get_collection_data()
-        
 
-    to_be_deleted = st.multiselect(label = "To be deleted records", options  = collection_data)
+    vectorDB = VectorDBCollectionsEditor(db_paths = [CHROMA_PATH])
+    all_collections = vectorDB.list_collections()
+
+
+    to_be_deleted_collections = st.multiselect("Select Collection to Delete",options = all_collections.get("chroma"))
+
+    if st.button("Delete Collection"):
+            for collection in to_be_deleted_collections:
+                try:
+                    chroma_db = ChromaConnector(collection_name=collection,db_dir=CHROMA_PATH,db_type="chroma")
+                        
+                    success = chroma_db.delete_collection(collection_name=collection)
+                    if success:
+                        st.success(f"Collection '{collection}' was deleted.")
+                    else:
+                        st.error(f"Could not delete collection '{collection}'.")
+                except Exception as exc:
+                    st.error(f"Error while deleting collection: {exc}")
+        
+   
+
         
 
