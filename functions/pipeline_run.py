@@ -166,6 +166,8 @@ def generate_chunks_embedding(*,collection_name,  model_name = EMBEDDING_MODELS[
                 "start_index": start_index,
                 "end_index": end_index,
                 "word_count": word_count,
+                "file_name":json_name,
+                "file_full_path":str(file_path),
                 **flat_entities
             }
 

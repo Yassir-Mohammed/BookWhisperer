@@ -9,7 +9,7 @@ from settings.vector_db_settings import DEFAULT_DB_TYPES,COLLECTION_META_DATA
 import json
 import os
 import re
-from typing import List, Dict, Any
+from typing import List, Dict,Optional,Any
 from collections import Counter
 from pathlib import Path
 from abc import ABC, abstractmethod
@@ -23,9 +23,8 @@ import spacy
 import chromadb
 from chromadb.utils import embedding_functions
 import inspect
-
-
-
+from sentence_transformers import SentenceTransformer
+import numpy as np
 
 
 class JSONL_Master:
@@ -543,13 +542,51 @@ class ChromaConnector(VectorDBConnector):
             print(f"Metadatas: {metadatas}")
             print(f"Error: {e}")
 
-    def query(self, embeddings, n_results=5):
-        results = self.collection.query(
-            query_embeddings=embeddings, n_results=n_results
-        )
+    def query_old(self, embeddings, n_results=5):
+        results = self.collection.query(query_embeddings=embeddings, n_results=n_results)
         docs = results["documents"][0]
         metas = results["metadatas"][0]
         return [{"document": d, "metadata": m} for d, m in zip(docs, metas)]
+    
+    def query(self, embeddings, n_results = 10, where=None,retrieval_list: list | None = ["documents", "metadatas"],  include_distance: bool = True):
+        
+    
+ 
+        if include_distance:
+            retrieval_list.append("distances")
+            
+        # Stage 1. Get raw results from ChromaDB
+        results = self.collection.query(
+            query_embeddings=embeddings,
+            n_results=n_results,
+            include = retrieval_list
+        )
+        
+        docs = results["documents"][0]
+        metas = results["metadatas"][0]
+        ids = results["ids"][0]
+        dists = results.get("distances", [[None]])[0] if include_distance else [None] * len(ids)
+        
+        items = [
+            {"id": i, "document": d, "metadata": m, "cosine_distance": dist,}
+            for i, d, m, dist in zip(ids, docs, metas,dists)
+        ]
+        
+
+        # Stage 2. Local filtering based on string search
+        if where:
+            filtered = []
+            for item in items:
+                text = (item["document"] or "").lower()
+                meta_text = " ".join(str(v) for v in item["metadata"].values()).lower()
+                combined = text + " " + meta_text
+
+                if any(t.lower() in combined for t in where):
+                    filtered.append(item)
+
+            return filtered
+
+        return items
     
     def update_collection_metadata(self, meta_data: dict):
         """Update the collection metadata, ignoring creation_date and None values."""
@@ -663,3 +700,78 @@ class VectorDBCollectionsEditor:
                 continue
 
         return db_collections
+    
+
+class EmbeddingLLM_Manager:
+    def __init__(self, model_name: str) -> None:
+        
+        func_name = inspect.currentframe().f_code.co_name
+        if model_name is None or model_name == "":
+            raise ValueError(f"{func_name}: model_name cannot be empty")
+            
+        self.model_name = model_name
+        self._load_model()
+
+    def _load_model(self) -> None:
+        
+        self.model = SentenceTransformer(self.model_name, device = self._get_device())
+
+    def encode_prompt(self, prompt: str) -> np.ndarray:
+        return self.model.encode(prompt)
+    
+    def get_model(self) -> SentenceTransformer:
+        return self.model
+    
+    def _get_device(self) -> str:
+        try:
+            import torch
+        except ImportError:
+            return "cpu"
+
+        return "cuda" if torch.cuda.is_available() else "cpu"
+    
+class Document_Finder:
+    def __init__(self, model:SentenceTransformer|str, vectorDBManager) -> None:
+        
+        self._load_or_create_model(model)
+        self.vectorDBManager = vectorDBManager
+    
+    def _load_or_create_model(self, model:SentenceTransformer|str) -> None:
+        
+        func_name = inspect.currentframe().f_code.co_name
+        
+        if isinstance(model, str):
+            embeddingLLM_manager = EmbeddingLLM_Manager(model_name = model)
+            self.model = embeddingLLM_manager.get_model()
+            
+        elif isinstance(model, SentenceTransformer):
+            self.model = model
+            
+        else:
+            raise ValueError(f"{func_name}: model can either be model name (str) or loaded model (SentenceTransformer)")
+        
+    def _prepare_query(self, query:str|np.ndarray) -> np.ndarray:
+        
+        func_name = inspect.currentframe().f_code.co_name
+        
+        if isinstance(query,str):
+             return self.model.encode(query)
+        elif isinstance(query, np.ndarray):
+             return query.copy()
+        else:
+            raise ValueError(f"{func_name}: query must be either str or np.ndarra (encoded query) ")
+        
+        return encoded_query
+    
+    def query_documents(self, query:str|np.ndarray, n_results:int = 50, where:Optional[dict] = None) -> list[dict]:
+        
+        func_name = inspect.currentframe().f_code.co_name
+        
+        embeddings = self._prepare_query(query)
+
+        return self.vectorDBManager.query(
+            embeddings=embeddings,
+            n_results=n_results,
+            where=where,
+        )
+        
