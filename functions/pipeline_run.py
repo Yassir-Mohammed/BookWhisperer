@@ -27,8 +27,10 @@ def parse_documents_into_md():
         doc_name = document['name']
         doc_path = Path(document['path'])
 
-        if doc_path in parsed_dcouments_list:
-            print(f"{func_name}: Skipping {document['name']}, since it is already parsed")
+        if doc_name is None:
+            continue
+        elif doc_path in parsed_dcouments_list:
+            print(f"{func_name}: Skipping {doc_name}, since it is already parsed")
             continue
         else:
             print(f"{func_name}: Parsing {doc_name} ({i}/{total_documents})")
@@ -70,7 +72,9 @@ def split_parsed_documents_into_chunks():
             doc_name = document.get('name',None)
             doc_path = document.get('path', None)
             
-            if doc_path in split_dcouments_list:
+            if doc_name is None:
+                continue
+            elif doc_path in split_dcouments_list:
                 print(f"{func_name}: Skipping {doc_name}, since it is already splitted")
                 continue
             else:

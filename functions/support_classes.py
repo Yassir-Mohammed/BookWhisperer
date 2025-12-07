@@ -736,7 +736,7 @@ class EmbeddingLLM_Manager:
         return "cuda" if torch.cuda.is_available() else "cpu"
 
 
-class LLMManager:
+class LLM_Manager:
     def __init__(self, model_name: str, mode: str) -> None:
         func_name = inspect.currentframe().f_code.co_name
 
@@ -832,20 +832,18 @@ class Document_Finder:
         func_name = inspect.currentframe().f_code.co_name
         
         if isinstance(model_name, str):
-            self.embeddingLLM_manager = LLMManager(model_name = model_name, mode = "encoder")
+            self.embeddingLLM_manager = LLM_Manager(model_name = model_name, mode = "encoder")
             
         else:
             raise ValueError(f"{func_name}: model can either be model name (str) or loaded model (SentenceTransformer)")
         
-    def _prepare_query(self, query:str|np.ndarray) -> np.ndarray:
-        
-        return self.embeddingLLM_manager.encode(query)
-    
+
     def query_documents(self, query:str|np.ndarray, n_results:int = 50, where:Optional[dict] = None) -> list[dict]:
         
         func_name = inspect.currentframe().f_code.co_name
         
-        embeddings = self._prepare_query(query)
+        embeddings = self.embeddingLLM_manager.encode(query)
+    
 
         return self.vectorDBManager.query(
             embeddings=embeddings,
