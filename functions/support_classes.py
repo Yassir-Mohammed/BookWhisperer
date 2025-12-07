@@ -27,6 +27,11 @@ from sentence_transformers import SentenceTransformer
 import numpy as np
 
 
+
+import torch
+from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline
+from langchain_huggingface import HuggingFacePipeline
+
 class JSONL_Master:
     
     def __init__(self):
@@ -729,39 +734,112 @@ class EmbeddingLLM_Manager:
             return "cpu"
 
         return "cuda" if torch.cuda.is_available() else "cpu"
-    
+
+
+class LLMManager:
+    def __init__(self, model_name: str, mode: str) -> None:
+        func_name = inspect.currentframe().f_code.co_name
+
+        if not model_name:
+            raise ValueError(f"{func_name}: model_name cannot be empty")
+
+        if mode not in ("encoder", "decoder"):
+            raise ValueError(f"{func_name}: mode must be 'encoder' or 'decoder'")
+
+        self.model_name = model_name
+        self.mode = mode
+        self.device = self._get_device()
+        self._load_model()
+
+    @staticmethod
+    def _get_device() -> str:
+        try:
+            import torch  # noqa
+        except ImportError:
+            return "cpu"
+        return "cuda" if torch.cuda.is_available() else "cpu"
+
+    def _load_model(self) -> None:
+        if self.mode == "encoder":
+            self.model = SentenceTransformer(self.model_name, device=self.device)
+
+        else:
+            tokenizer = AutoTokenizer.from_pretrained(self.model_name)
+
+            model = AutoModelForCausalLM.from_pretrained(
+                self.model_name,
+                torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
+                device_map=self.device
+            )
+
+            gen_pipeline = pipeline(
+                task="text-generation",
+                model=model,
+                tokenizer=tokenizer,
+                max_new_tokens=128,
+                do_sample=True,
+                temperature=0.7
+            )
+
+            self.tokenizer = tokenizer
+            self.model = model
+            self.llm = HuggingFacePipeline(pipeline=gen_pipeline)
+
+    def encode(self, prompt: str | np.ndarray) -> np.ndarray:
+        func_name = inspect.currentframe().f_code.co_name
+
+        if self.mode != "encoder":
+            raise RuntimeError(f"{func_name}: encode called in decoder mode")
+
+        if isinstance(prompt, str):
+            return self.model.encode(prompt)
+
+        if isinstance(prompt, np.ndarray):
+            return prompt
+
+        raise TypeError(f"{func_name}: prompt must be str or np.ndarray")
+
+    def generate(self, prompt: str) -> str:
+        func_name = inspect.currentframe().f_code.co_name
+        if self.mode != "decoder":
+            raise RuntimeError(f"{func_name}: generate called in encoder mode")
+        return self.llm.invoke(prompt)
+
+    def get_model(self):
+        return self.model
+
+    def get_tokenizer(self):
+        func_name = inspect.currentframe().f_code.co_name
+        if self.mode != "decoder":
+            raise RuntimeError(f"{func_name}: Tokenizer is only available in decoder mode")
+        return self.tokenizer
+
+    def get_langchain_llm(self):
+        func_name = inspect.currentframe().f_code.co_name
+        if self.mode != "decoder":
+            raise RuntimeError(f"{func_name}: Langchain interface is only available in decoder mode")
+        return self.llm
+
+
 class Document_Finder:
-    def __init__(self, model:SentenceTransformer|str, vectorDBManager) -> None:
+    def __init__(self, model_name:str, vectorDBManager) -> None:
         
-        self._load_or_create_model(model)
+        self._load_or_create_model(model_name = model_name)
         self.vectorDBManager = vectorDBManager
     
-    def _load_or_create_model(self, model:SentenceTransformer|str) -> None:
+    def _load_or_create_model(self, model_name:str) -> None:
         
         func_name = inspect.currentframe().f_code.co_name
         
-        if isinstance(model, str):
-            embeddingLLM_manager = EmbeddingLLM_Manager(model_name = model)
-            self.model = embeddingLLM_manager.get_model()
-            
-        elif isinstance(model, SentenceTransformer):
-            self.model = model
+        if isinstance(model_name, str):
+            self.embeddingLLM_manager = LLMManager(model_name = model_name, mode = "encoder")
             
         else:
             raise ValueError(f"{func_name}: model can either be model name (str) or loaded model (SentenceTransformer)")
         
     def _prepare_query(self, query:str|np.ndarray) -> np.ndarray:
         
-        func_name = inspect.currentframe().f_code.co_name
-        
-        if isinstance(query,str):
-             return self.model.encode(query)
-        elif isinstance(query, np.ndarray):
-             return query.copy()
-        else:
-            raise ValueError(f"{func_name}: query must be either str or np.ndarra (encoded query) ")
-        
-        return encoded_query
+        return self.embeddingLLM_manager.encode(query)
     
     def query_documents(self, query:str|np.ndarray, n_results:int = 50, where:Optional[dict] = None) -> list[dict]:
         
@@ -774,4 +852,3 @@ class Document_Finder:
             n_results=n_results,
             where=where,
         )
-        
