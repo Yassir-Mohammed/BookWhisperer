@@ -850,3 +850,31 @@ class Document_Finder:
             n_results=n_results,
             where=where,
         )
+
+    @staticmethod
+    def load_results(results: list[dict]) -> list[dict]:
+        """Loads JSON files referenced by vector store entries."""
+        func_name = inspect.currentframe().f_code.co_name
+        if not results: return []
+
+        loaded = []
+
+        for entry in results:
+            
+            meta = entry.get("metadata", {})
+            path = meta.get("file_full_path")
+       
+            if not path:continue
+
+            try:
+                with open(path, "r", encoding="utf8") as f:
+                    doc = json.load(f)
+                    doc |= {"cosine_distance":entry.get("cosine_distance", None)}
+                    
+                    loaded.append(doc)
+                    
+            except (FileNotFoundError, json.JSONDecodeError):
+                raise ValueError(f"{func_name}: Error Loading json file: {path}")
+                continue
+
+        return loaded
