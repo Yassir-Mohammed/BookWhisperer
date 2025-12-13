@@ -737,19 +737,19 @@ class EmbeddingLLM_Manager:
 
 
 class LLM_Manager:
-    def __init__(self, model_name: str, mode: str) -> None:
+    def __init__(self, model_name: str, mode: str, local_path: str | None = None) -> None:
         func_name = inspect.currentframe().f_code.co_name
 
-        if not model_name:
-            raise ValueError(f"{func_name}: model_name cannot be empty")
+        if (not model_name) and (not local_path):
+            raise ValueError(f"{func_name}: model_name or local_path cannot be empty")
 
-        if mode not in ("encoder", "decoder"):
-            raise ValueError(f"{func_name}: mode must be 'encoder' or 'decoder'")
+        if mode not in ("encoder", "decoder", "seq2seq"):
+            raise ValueError(f"{func_name}: mode must be 'encoder', 'decoder', or 'seq2seq'")
 
         self.model_name = model_name
         self.mode = mode
         self.device = self._get_device()
-        self._load_model()
+        self._load_model(local_path)
 
     @staticmethod
     def _get_device() -> str:
@@ -759,31 +759,48 @@ class LLM_Manager:
             return "cpu"
         return "cuda" if torch.cuda.is_available() else "cpu"
 
-    def _load_model(self) -> None:
+    def _load_model(self, local_path: str | None = None) -> None:
+        path_or_model = local_path if local_path else self.model_name
+
         if self.mode == "encoder":
-            self.model = SentenceTransformer(self.model_name, device=self.device)
+            self.model = SentenceTransformer(path_or_model, device=self.device)
+            return
 
-        else:
-            tokenizer = AutoTokenizer.from_pretrained(self.model_name)
+        tokenizer = AutoTokenizer.from_pretrained(
+            path_or_model,
+            trust_remote_code=True
+        )
 
+        if self.mode == "decoder":
             model = AutoModelForCausalLM.from_pretrained(
-                self.model_name,
+                path_or_model,
                 torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
-                device_map=self.device
+                device_map="auto",
+                trust_remote_code=True
             )
+            task = "text-generation"
 
-            gen_pipeline = pipeline(
-                task="text-generation",
-                model=model,
-                tokenizer=tokenizer,
-                max_new_tokens=128,
-                do_sample=True,
-                temperature=0.7
+        elif self.mode == "seq2seq":
+            model = AutoModelForSeq2SeqLM.from_pretrained(
+                path_or_model,
+                dtype=torch.float16 if self.device == "cuda" else torch.float32,
+                device_map="auto",
+                trust_remote_code=True
             )
+            task = "text2text-generation"
 
-            self.tokenizer = tokenizer
-            self.model = model
-            self.llm = HuggingFacePipeline(pipeline=gen_pipeline)
+        gen_pipeline = pipeline(
+            task=task,
+            model=model,
+            tokenizer=tokenizer,
+            max_new_tokens=128,
+            do_sample=True,
+            temperature=0.7
+        )
+
+        self.tokenizer = tokenizer
+        self.model = model
+        self.llm = HuggingFacePipeline(pipeline=gen_pipeline)
 
     def encode(self, prompt: str | np.ndarray) -> np.ndarray:
         func_name = inspect.currentframe().f_code.co_name
@@ -801,8 +818,10 @@ class LLM_Manager:
 
     def generate(self, prompt: str) -> str:
         func_name = inspect.currentframe().f_code.co_name
-        if self.mode != "decoder":
+
+        if self.mode not in ("decoder", "seq2seq"):
             raise RuntimeError(f"{func_name}: generate called in encoder mode")
+
         return self.llm.invoke(prompt)
 
     def get_model(self):
@@ -819,6 +838,53 @@ class LLM_Manager:
         if self.mode != "decoder":
             raise RuntimeError(f"{func_name}: Langchain interface is only available in decoder mode")
         return self.llm
+    
+
+
+    def generate_with_template(self, template: dict | str, input: str, required_information : str) -> dict:
+        func_name = inspect.currentframe().f_code.co_name
+
+        if self.mode not in ("decoder", "seq2seq"):
+            raise RuntimeError(f"{func_name}: available only in decoder or seq2seq mode")
+
+        if isinstance(template, dict):
+            template_str = json.dumps(template, indent=2)
+        elif isinstance(template, str):
+            template_str = template
+        else:
+            raise TypeError(f"{func_name}: template must be dict or JSON string")
+
+        prompt = f"""
+                You are an information extraction system.
+
+                Your task is to **LITERALLY** extract conversations between the specified characters from the document. You MUST NOT change a single word or punctuation mark. **Treat this task like a copy-paste operation.**
+
+                You MUST copy the dialogue text exactly as it appears in the document.
+
+                Hard constraints:
+                - Do NOT rewrite, paraphrase, summarize, normalize, or correct the text
+                - Do NOT use synonyms, rephrase sentence structures, or alter *any* part of the original text.
+                - Preserve original spelling, punctuation, capitalization, line breaks, and spacing
+                - Use the exact character names as they appear in the document
+                - Maintain the original order of all utterances
+                - Exclude narration and non-dialogue text unless explicitly required by the template
+                - Only include dialogue involving the listed characters
+
+                Return ONLY a valid JSON object that strictly follows the provided template.
+                Do NOT include explanations, comments, or additional formatting.
+                ... (Add your few-shot example here) ...
+                Required information:
+                {required_information}
+
+                Template:
+                {template_str}
+
+                Document:
+                {input}
+                """
+
+        
+        return self.llm.invoke(prompt)
 
 
 class Document_Finder:
