@@ -15,6 +15,7 @@ from pathlib import Path
 from abc import ABC, abstractmethod
 import warnings
 from datetime import datetime, timezone
+import pickle
 
 # NLP Import 
 import spacy
@@ -26,8 +27,17 @@ import inspect
 from sentence_transformers import SentenceTransformer
 import numpy as np
 
+# Google Drive imports
+from google.auth.transport.requests import Request
+from google.oauth2.credentials import Credentials
+from google.oauth2 import service_account
+from google_auth_oauthlib.flow import InstalledAppFlow
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaFileUpload
+from googleapiclient.errors import HttpError
 
 
+# AI agents Imimportsport
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline
 from langchain_huggingface import HuggingFacePipeline
@@ -944,3 +954,357 @@ class Document_Finder:
                 continue
 
         return loaded
+    
+
+
+
+
+
+class GoogleDriveManager:
+    """
+    A class to interact with Google Drive API with multiple authentication methods.
+    
+    Authentication Methods:
+    1. OAuth 2.0 (default) - Interactive browser-based auth
+    2. Service Account - Uses JSON key file for automation
+    
+    Features:
+    - Create folders and subfolders
+    - Upload files to specific folders
+    - List files and folders
+    """
+    
+    SCOPES = ['https://www.googleapis.com/auth/drive']
+    
+    def __init__(self, 
+                 auth_method:str='oauth',
+                 credentials_file:str='credentials.json', 
+                 token_file:Path='token.pickle',
+                 service_account_file:str=None,
+                 delegated_user_email:str=None,
+                 force_login:bool=True):
+        """
+        Initialize the Google Drive Manager.
+        
+        Args:
+            auth_method (str): 'oauth' or 'service_account'
+            credentials_file (str): Path to OAuth credentials JSON file
+            token_file (str): Path to store/load OAuth token
+            service_account_file (str): Path to service account JSON key file
+            delegated_user_email (str): Email to impersonate (for service accounts with domain-wide delegation)
+            force_login (bool): If True, forces OAuth login every time (ignores saved token)
+        """
+        self.auth_method = auth_method
+        self.credentials_file = credentials_file
+        self.token_file = token_file
+        self.service_account_file = service_account_file
+        self.delegated_user_email = delegated_user_email
+        self.force_login = force_login
+        self.creds = None
+        self.service = None
+        self.authenticate()
+    
+    def authenticate(self):
+        """
+        Authenticate with Google Drive based on selected method.
+        """
+        func_name = inspect.currentframe().f_code.co_name
+        if self.auth_method == 'service_account':
+            self._authenticate_service_account()
+        else:
+            self._authenticate_oauth()
+        
+        # Build the service
+        self.service = build('drive', 'v3', credentials=self.creds)
+        print(f"{func_name}: Successfully authenticated with Google Drive using {self.auth_method}!")
+    
+    def _authenticate_oauth(self):
+        """
+        Authenticate using OAuth 2.0 (interactive browser method).
+        """
+        # If force_login is True, skip loading the saved token
+        func_name = inspect.currentframe().f_code.co_name
+        if not self.force_login and os.path.exists(self.token_file):
+            with open(self.token_file, 'rb') as token:
+                self.creds = pickle.load(token)
+        
+        # Refresh or get new credentials
+        if not self.creds or not self.creds.valid or self.force_login:
+            if self.creds and self.creds.expired and self.creds.refresh_token and not self.force_login:
+                self.creds.refresh(Request())
+            else:
+                if not os.path.exists(self.credentials_file):
+                    raise FileNotFoundError(
+                        f"{func_name}: Credentials file '{self.credentials_file}' not found. "
+                        "Download it from Google Cloud Console."
+                    )
+                flow = InstalledAppFlow.from_client_secrets_file(
+                    self.credentials_file, self.SCOPES
+                )
+                # Force account selection prompt
+                self.creds = flow.run_local_server(
+                    port=0,
+                    prompt='select_account'  # Forces user to select account every time
+                )
+            
+            # Save credentials for future use (unless force_login is True)
+            if not self.force_login:
+                with open(self.token_file, 'wb') as token:
+                    pickle.dump(self.creds, token)
+    
+    def _authenticate_service_account(self):
+        """
+        Authenticate using a Service Account JSON key file.
+        """
+        func_name = inspect.currentframe().f_code.co_name
+        if not self.service_account_file:
+            raise ValueError(f"{func_name}: service_account_file must be provided for service account authentication")
+        
+        if not os.path.exists(self.service_account_file):
+            raise FileNotFoundError(f"{func_name}: Service account file '{self.service_account_file}' not found")
+        
+        # Load service account credentials
+        self.creds = service_account.Credentials.from_service_account_file(
+            self.service_account_file,
+            scopes=self.SCOPES
+        )
+        
+        # If delegated user email is provided, impersonate that user
+        if self.delegated_user_email:
+            self.creds = self.creds.with_subject(self.delegated_user_email)
+    
+    def create_folder(self, folder_name, parent_id=None):
+        """
+        Create a folder in Google Drive.
+        
+        Args:
+            folder_name (str): Name of the folder to create
+            parent_id (str, optional): ID of parent folder. If None, creates in root.
+        
+        Returns:
+            str: ID of the created folder
+        """
+        func_name = inspect.currentframe().f_code.co_name
+        try:
+            file_metadata = {
+                'name': folder_name,
+                'mimeType': 'application/vnd.google-apps.folder'
+            }
+            
+            if parent_id:
+                file_metadata['parents'] = [parent_id]
+            
+            folder = self.service.files().create(
+                body=file_metadata,
+                fields='id, name'
+            ).execute()
+            
+            print(f"{func_name}: Created folder '{folder.get('name')}' with ID: {folder.get('id')}")
+            return folder.get('id')
+        
+        except HttpError as error:
+            print(f"{func_name}: An error occurred: {error}")
+            return None
+    
+    def create_subfolder(self, folder_name, parent_folder_id):
+        """
+        Create a subfolder inside an existing folder.
+        
+        Args:
+            folder_name (str): Name of the subfolder
+            parent_folder_id (str): ID of the parent folder
+        
+        Returns:
+            str: ID of the created subfolder
+        """
+        func_name = inspect.currentframe().f_code.co_name
+        try:
+            return self.create_folder(folder_name, parent_folder_id)
+        except Exception as error:
+            print(f"{func_name}: An error occurred while creating subfolder '{folder_name}': {error}")
+            return None
+    
+    def upload_file(self, file_path, folder_id=None, file_name=None):
+        """
+        Upload a file to Google Drive.
+        
+        Args:
+            file_path (str): Path to the local file
+            folder_id (str, optional): ID of folder to upload to. If None, uploads to root.
+            file_name (str, optional): Name for the file in Drive. If None, uses original name.
+        
+        Returns:
+            str: ID of the uploaded file
+        """
+        func_name = inspect.currentframe().f_code.co_name
+        try:
+            if not os.path.exists(file_path):
+                raise FileNotFoundError(f"{func_name}: File '{file_path}' not found")
+            
+            # Use original filename if not specified
+            if file_name is None:
+                file_name = os.path.basename(file_path)
+            
+            file_metadata = {'name': file_name}
+            
+            if folder_id:
+                file_metadata['parents'] = [folder_id]
+            
+            media = MediaFileUpload(file_path, resumable=True)
+            
+            file = self.service.files().create(
+                body=file_metadata,
+                media_body=media,
+                fields='id, name'
+            ).execute()
+            
+            print(f"{func_name}: Uploaded file '{file.get('name')}' with ID: {file.get('id')}")
+            return file.get('id')
+        
+        except HttpError as error:
+            print(f"{func_name}: An error occurred: {error}")
+            return None
+    
+    def share_file(self, file_id, email, role='reader'):
+        """
+        Share a file or folder with a specific email address.
+        
+        Args:
+            file_id (str): ID of the file or folder to share
+            email (str): Email address to share with
+            role (str): Permission role - 'reader', 'writer', or 'owner'
+        
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        func_name = inspect.currentframe().f_code.co_name
+        try:
+            permission = {
+                'type': 'user',
+                'role': role,
+                'emailAddress': email
+            }
+            
+            self.service.permissions().create(
+                fileId=file_id,
+                body=permission,
+                fields='id'
+            ).execute()
+            
+            print(f"{func_name}: Shared file/folder {file_id} with {email} as {role}")
+            return True
+        
+        except HttpError as error:
+            print(f"{func_name}: An error occurred: {error}")
+            return False
+    
+    def list_files(self, folder_id=None, page_size=10):
+        """
+        List files in Google Drive.
+        
+        Args:
+            folder_id (str, optional): ID of folder to list. If None, lists from root.
+            page_size (int): Number of files to return
+        
+        Returns:
+            list: List of files with their metadata
+        """
+        func_name = inspect.currentframe().f_code.co_name
+        try:
+            query = ""
+            if folder_id:
+                query = f"'{folder_id}' in parents"
+            
+            results = self.service.files().list(
+                q=query,
+                pageSize=page_size,
+                fields="files(id, name, mimeType, createdTime)"
+            ).execute()
+            
+            files = results.get('files', [])
+            
+            if not files:
+                print(f'{func_name}: No files found.')
+                return []
+            
+            print(f'Found {len(files)} file(s):')
+            for file in files:
+                print(f"{func_name}: {file['name']} ({file['id']})")
+            
+            return files
+        
+        except HttpError as error:
+            print(f"{func_name}: An error occurred: {error}")
+            return []
+    
+    def get_folder_id_by_name(self, folder_name, parent_id=None):
+        """
+        Find a folder ID by its name.
+        
+        Args:
+            folder_name (str): Name of the folder to find
+            parent_id (str, optional): ID of parent folder to search in
+        
+        Returns:
+            str: ID of the folder, or None if not found
+        """
+        func_name = inspect.currentframe().f_code.co_name
+        try:
+            query = f"name='{folder_name}' and mimeType='application/vnd.google-apps.folder'"
+            if parent_id:
+                query += f" and '{parent_id}' in parents"
+            
+            results = self.service.files().list(q=query,fields="files(id, name)").execute()
+            
+            files = results.get('files', [])
+            
+            if files:
+                return files[0]['id']
+            return None
+        
+        except HttpError as error:
+            print(f"{func_name}: An error occurred: {error}")
+            return None
+
+    def delete_file_or_folder(self, file_id):
+        """
+        Delete a file or folder (including all its contents) from Google Drive.
+        
+        Note: When you delete a folder, Google Drive automatically deletes
+        all files and subfolders inside it.
+        
+        Args:
+            file_id (str): ID of the file or folder to delete
+        
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        func_name = inspect.currentframe().f_code.co_name
+        try:
+            self.service.files().delete(fileId=file_id).execute()
+            print(f"{func_name}: Successfully deleted file/folder with ID: {file_id}")
+            return True
+        
+        except HttpError as error:
+            print(f"{func_name}: An error occurred while deleting: {error}")
+            return False
+    
+    def delete_folder_by_name(self, folder_name, parent_id=None):
+        """
+        Delete a folder by its name (including all contents).
+        
+        Args:
+            folder_name (str): Name of the folder to delete
+            parent_id (str, optional): ID of parent folder to search in
+        
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        func_name = inspect.currentframe().f_code.co_name
+        folder_id = self.get_folder_id_by_name(folder_name, parent_id)
+        
+        if folder_id:
+            return self.delete_file_or_folder(folder_id)
+        else:
+            print(f"{func_name}: Folder '{folder_name}' not found")
+            return False

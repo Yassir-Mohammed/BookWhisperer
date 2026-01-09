@@ -2,6 +2,7 @@ import re
 import streamlit as st
 import tempfile
 import os
+import json
 from functions.support_classes import JSONL_Master,ChromaConnector,VectorDBCollectionsEditor
 from functions.support_functions import list_documents,build_file_summary_tree
 from settings.extraction_settings import SUPPORTED_SUFFIXES
@@ -208,6 +209,9 @@ def create_or_select_collection(vectorDB_path:str, create_collection_automatical
     return new_collection_name if was_created else (selected_collection if selected_collection != "New collection name" else None)
 
 
+
+
+
 def create_new_collection(*,new_collection_name:str,vectorDB_path:str, metadata:dict):
     
     func_name = inspect.currentframe().f_code.co_name
@@ -229,3 +233,71 @@ def create_new_collection(*,new_collection_name:str,vectorDB_path:str, metadata:
 def collection_creation_expander(vectorDB_path:str, create_collection_automatically:bool = True):
     with st.expander("Select or Create Collection"):
         return create_or_select_collection(vectorDB_path = vectorDB_path, create_collection_automatically = create_collection_automatically)
+    
+
+
+def books_browser(element_text="Upload PDF documents",allowed_types=["pdf"],accept_multiple_files=True):
+
+    
+    input_documents = st.file_uploader(element_text,accept_multiple_files=accept_multiple_files,type=allowed_types)
+    
+
+    if not input_documents:
+        return {}, [], False
+    
+    invalid_files = []
+    valid_files = {}
+    seen_filenames = set()
+    
+    for file in input_documents:
+        filename = file.name
+
+        # skip duplicate filenames
+        if filename in seen_filenames:
+            continue
+        seen_filenames.add(filename)
+
+        # check filename pattern
+        pattern_check, _ = check_input_validation(text = filename, mode = "chars_and_numbers")
+        if not pattern_check:
+            invalid_files.append(filename)
+        else:
+            valid_files[filename] = file
+
+    # rebuild input_documents to contain only valid, unique files
+    input_documents = list(valid_files.values()) + invalid_files
+    commit_btn_disable = False if valid_files != {}  else True
+
+
+
+def provide_google_secrets_file(account_type:list[str] = None):
+
+    func_name = inspect.currentframe().f_code.co_name
+
+    FILE_TYPE = 'JSON'
+    allowed_accounts = ["service_account", "Oauthentication"]
+
+    if account_type not in allowed_accounts:
+        raise ValueError(f"{func_name}: account type must be one of {allowed_accounts}")
+    
+    if account_type == None:
+        account_type = "service_account"
+    try:
+        secret_file = st.file_uploader(f"Upload {account_type} secret file", accept_multiple_files=False, type=[FILE_TYPE])
+
+        service_account_path = None
+
+        if secret_file is not None:
+            with tempfile.NamedTemporaryFile(delete=False,suffix= f".{FILE_TYPE}") as tmp:
+                tmp.write(uploaded_file.getvalue())
+                service_account_path = tmp.name
+
+    except Exception as exc:
+        print(f"{func_name}: Could not upload Google's secret file: {exc}")
+        return None, None
+
+    return service_account_path,account_type
+
+    
+        
+
