@@ -20,7 +20,7 @@ from utilities.paths import *
 st.set_page_config(page_title="Books Whispers", page_icon="🎓", layout="centered")
 
 # Page title
-st.title("🎓 Books Whispers")
+st.title("📚 Books Whispers")
 
 
 document_parsing_flag = False
@@ -31,11 +31,11 @@ _, _ , document_parsing_flag = upload_files_element(element_text = "Upload PDF d
 
 
 
-if document_parsing_flag:
-    google_secret_file_path, account_type = provide_google_secrets_file(account_type = "service_account")
 
-    if google_secret_file_path and account_type:
-        google_drive = GoogleDriveManager(auth_method='service_account',service_account_file=google_secret_file_path)
+google_secret_file_path, account_type = provide_google_secrets_file(account_type = "service_account")
+
+if google_secret_file_path and account_type:
+    google_drive = GoogleDriveManager(auth_method='service_account',service_account_file=google_secret_file_path)
 
     button_disabled_flag = (not document_parsing_flag) and (not google_drive)
 
